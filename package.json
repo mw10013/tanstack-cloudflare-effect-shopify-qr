@@ -57,6 +57,7 @@
     "refs:shopify-app-js": "rm -rf refs/shopify-app-js && mkdir -p refs/shopify-app-js && curl -L https://github.com/Shopify/shopify-app-js/archive/refs/heads/main.tar.gz | tar -xz -C refs/shopify-app-js --strip-components=1",
     "refs:shopify-session-prisma": "rm -rf refs/shopify-session-prisma && mkdir -p refs/shopify-session-prisma && curl -L https://github.com/Shopify/shopify-app-js/archive/refs/tags/@shopify/shopify-app-session-storage-prisma@8.0.1.tar.gz | tar -xz -C refs/shopify-session-prisma --strip-components=1",
     "refs:shopify-codegen": "rm -rf refs/shopify-codegen && mkdir -p refs/shopify-codegen && curl -L https://github.com/Shopify/shopify-app-js/archive/refs/tags/@shopify/api-codegen-preset@1.2.2.tar.gz | tar -xz -C refs/shopify-codegen --strip-components=1",
+    "refs:shopify-app-qr": "rm -rf refs/shopify-app-qr && mkdir -p refs/shopify-app-qr && curl -L https://github.com/Shopify/shopify-app-examples/archive/refs/heads/main.tar.gz | tar -xz -C refs/shopify-app-qr --strip-components=1",
     "refs:shopify-docs": "node scripts/refs-shopify-docs.ts",
     "refs:shopify-docs:graphql": "node scripts/refs-shopify-docs.ts --section graphql",
     "refs:shopify-docs:app": "node scripts/refs-shopify-docs.ts --section app",
