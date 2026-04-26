@@ -1,0 +1,155 @@
+# Shopify GraphQL Codegen Research
+
+## Current Project State
+
+Already configured but not running:
+
+- `.graphqlrc.ts` — configured with `ApiType.Admin`, `ApiVersion.January26`, scans `./src/**/*.{js,ts,jsx,tsx}`, outputs to `./src/types`
+- `package.json` — has `"graphql-codegen": "graphql-codegen"` script and `@shopify/api-codegen-preset@2.0.0` devDependency
+- `src/lib/ProductRepository.ts` — uses `#graphql` tagged template literals (lines 28, 62)
+- `.codegen/` — output dir; gitignored; created on first codegen run; contains `admin.types.d.ts` (full schema) and `admin.generated.d.ts` (operation-specific types)
+
+## Shopify Recommendation
+
+`refs/shopify-docs/docs/api/shopify-app-react-router/v1/guide-graphql-types.md`:
+
+> The GraphQL clients provided in this package can use Codegen to automatically parse and create types for your queries and mutations.
+> By installing a few packages in your app, you can use the `graphql-codegen` script, which will look for strings with the `#graphql` tag and extract types from them.
+
+Tool: `graphql-codegen` + `@shopify/api-codegen-preset`
+
+Key constraint:
+> Parsing will not work on `.graphql` documents, because the preset can only apply types from JavaScript and TypeScript const strings.
+
+Queries must use `#graphql` tagged template literals, not `.graphql` files.
+
+## Using Codegen as a Validation Check
+
+The user's intent: run codegen not to use the generated types, but to **validate that GraphQL queries are correct against the schema**. If codegen fails, the query is invalid.
+
+```bash
+pnpm graphql-codegen
+```
+
+Add to CI or typecheck workflow. Codegen fetches the live Shopify Admin schema via the proxy endpoint (see below) and validates all `#graphql` strings against it.
+
+## Getting the Shopify Admin GraphQL Schema
+
+### Proxy endpoint (used by codegen)
+
+```
+https://shopify.dev/admin-graphql-direct-proxy/{API_VERSION}
+```
+
+Example from `.graphqlrc.ts` docs:
+```ts
+schema: 'https://shopify.dev/admin-graphql-direct-proxy/2023-10',
+```
+
+The `shopifyApiProject` helper in `.graphqlrc.ts` configures this automatically based on `apiVersion`.
+
+### Introspection / SDL download
+
+No dedicated CLI command for the Admin API schema. The proxy endpoint supports GraphQL introspection, so tools like `graphql-cli` or Apollo can download the SDL:
+
+```bash
+npx graphql-cli get-schema --endpoint https://shopify.dev/admin-graphql-direct-proxy/2024-01 --output schema.graphql
+```
+
+## GraphiQL Explorer (browser-based)
+
+Shopify provides a hosted GraphiQL IDE:
+
+- URL: `https://shopify.dev/docs/api/usage/api-exploration/admin-graphiql-explorer`
+- Allows browsing schema, writing and testing queries/mutations against a real store
+- Requires Shopify Partner account / store connection
+
+Referenced in `refs/shopify-docs/` across multiple docs (products, webhooks, etc.) as the recommended tool for interactive schema exploration.
+
+## .graphqlrc.ts Pattern
+
+Current project (`/.graphqlrc.ts`) includes top-level `schema` and `documents` for IDE syntax highlighting / auto-complete, plus the `default` project for codegen:
+
+```ts
+import { ApiVersion } from "@shopify/shopify-api";
+import { ApiType, shopifyApiProject } from "@shopify/api-codegen-preset";
+
+export default {
+  schema: `https://shopify.dev/admin-graphql-direct-proxy/${ApiVersion.January26}`,
+  documents: ["./src/**/*.{js,ts,jsx,tsx}"],
+  projects: {
+    default: shopifyApiProject({
+      apiType: ApiType.Admin,
+      apiVersion: ApiVersion.January26,
+      documents: ["./src/**/*.{js,ts,jsx,tsx}"],
+      outputDir: "./.codegen",
+    }),
+  },
+};
+```
+
+Template (`refs/shopify-app-template/.graphqlrc.ts`) also adds extension project entries for Shopify Functions with their own `schema.graphql`.
+
+## VSCode Extension: GraphQL Language Feature Support
+
+Extension: `GraphQL.vscode-graphql` + `GraphQL.vscode-graphql-syntax`
+
+Reads `.graphqlrc.ts` to provide hover, autocomplete, validation, and go-to-definition inside `#graphql` template literals. **Not currently installed in this project** (no `.vscode/extensions.json`).
+
+This project's `graphqlDecode` wrapper takes `query: string` and derives return types from the `Schema.Decoder<A>` argument — not from codegen-generated operation types. So the generated `admin.generated.d.ts` types are never referenced and IDE type inference on responses comes from Effect Schema, not the extension.
+
+The extension is of marginal utility as-is but could become more useful as the project grows and more queries are added. Known limitations for `#graphql` template literals vs standalone `.graphql` files:
+
+- **In-editor query execution broken** — requires at least one standalone `.graphql` file; template-literal-only projects can't run queries from the editor ([issue #2353](https://github.com/graphql/graphiql/issues/2353))
+- **Fragment interpolation kills intellisense** — `${SomeFragment}` expressions break autocomplete ([vscode-graphql issue #123](https://github.com/graphql/vscode-graphql/issues/123))
+- **TypeScript generics break everything** — `gql<SomeType>` syntax kills highlighting, autocomplete, and hover ([issue #2356](https://github.com/graphql/graphiql/issues/2356))
+
+None of these currently apply to this project (no fragment interpolation, no TS generics on the tag, no in-editor execution needed).
+
+## Generated Types and `any` Scalars
+
+`src/types/admin.types.d.ts` (69k lines) contains the full Admin API schema. The 14 `any` occurrences are all **GraphQL custom scalars**:
+
+```ts
+export type Scalars = {
+  ID: { input: string; output: string; }    // built-in — typed
+  String: { input: string; output: string; } // built-in — typed
+  // ...
+  DateTime: { input: any; output: any; }    // custom — no info
+  JSON:     { input: any; output: any; }    // custom — no info
+  Money:    { input: any; output: any; }    // custom — no info
+  URL:      { input: any; output: any; }    // custom — no info
+  // etc.
+};
+```
+
+The 5 built-in GraphQL scalars are typed because the spec defines their TS equivalents. Shopify-proprietary scalars (`DateTime`, `Money`, `URL`, `ARN`, `HTML`, etc.) are opaque to codegen — the schema declares them but says nothing about their serialized TypeScript shape. `@shopify/api-codegen-preset` ships no scalar mappings, so codegen falls back to `any`.
+
+Fix requires a `scalars` config mapping each custom scalar to its actual TS type:
+```ts
+scalars: {
+  DateTime: "string",
+  Date: "string",
+  URL: "string",
+  Money: "string",
+  HTML: "string",
+  JSON: "Record<string, unknown>",
+  UnsignedInt64: "string",
+  // ...
+}
+```
+
+Since we're only using codegen for **validation**, not importing the generated types, these `any`s are irrelevant to the app. Output goes to `.codegen/` which is gitignored and outside `src/`, so no lint errors.
+
+## Summary
+
+| Item | Value |
+|------|-------|
+| Tool | `graphql-codegen` + `@shopify/api-codegen-preset` |
+| Query format | `#graphql` tagged template literals only |
+| Config | `.graphqlrc.ts` (already present) |
+| Script | `pnpm graphql-codegen` (already in package.json) |
+| Schema proxy | `https://shopify.dev/admin-graphql-direct-proxy/{version}` |
+| GraphiQL | https://shopify.dev/docs/api/usage/api-exploration/admin-graphiql-explorer |
+| Generated types dir | `.codegen/` (gitignored; `admin.types.d.ts`, `admin.generated.d.ts`) |
+| Validation use | Run codegen in CI; failure = invalid GraphQL |
