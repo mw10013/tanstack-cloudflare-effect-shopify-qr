@@ -1,9 +1,10 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "ef96e2661ae7e32120c4f51629ad65b7"
+client_id = ""
 name = "tcesq-staging"
 application_url = "https://tcesq-staging.mw10013.workers.dev"
 embedded = true
+web_directories = ["."]
 
 [build]
 automatically_update_urls_on_dev = false
