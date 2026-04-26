@@ -8,7 +8,7 @@
 
 ## Project
 
-- `tanstack-cloudflare-effect-shopify-qr` is a port of refs/shopify-app-template for TanStack Start, Cloudflare and effect v4.
+- `tanstack-cloudflare-effect-shopify-qr` is a port of refs/shopify-app-qr for TanStack Start, Cloudflare and effect v4.
 - Route modules are in `src/routes/` and use file route conventions.
 
 ## Port Configuration
@@ -38,7 +38,7 @@ Downloaded source code of libraries are in `refs/` for reference.
 - **Cloudflare Docs**: `refs/cloudflare-docs/src/content/docs/` (MDX files)
 - **Effect v4 Docs**: `refs/effect4/ai-docs/src/`
 - **Shopify App JS**: `refs/shopify-app-js/` (source for `shopify-api`, `shopify-app-react-router`, and session storage adapters)
-- **Shopify App Template**: `refs/shopify-app-template/`
+- **Shopify App QR** (this is the app we're are porting): `refs/shopify-app-qr/`
 - **Shopify Bridge**: `refs/shopify-bridge/`
 - **Shopify Codegen**: `refs/shopify-codegen/`
 - **Shopify Docs**: `refs/shopify-docs/`
