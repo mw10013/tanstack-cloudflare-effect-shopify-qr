@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "tcesa-local",
+  "name": "tcesq-local",
   "compatibility_date": "2026-04-11",
   "compatibility_flags": ["nodejs_compat"],
   "account_id": "87997fc2724b0127effb8e4524989975",
@@ -22,35 +22,35 @@
   "d1_databases": [
     {
       "binding": "D1",
-      "database_name": "tcesa-d1-local",
-      "database_id": "tcesa-d1-local"
+      "database_name": "tcesq-d1-local",
+      "database_id": "tcesq-d1-local"
     }
   ],
   "env": {
     "staging": {
-      "name": "tcesa-staging",
+      "name": "tcesq-staging",
       "vars": {
         "ENVIRONMENT": "staging",
-        "SHOPIFY_APP_URL": "https://tcesa-staging.87997fc2724b0127effb8e4524989975.workers.dev"
+        "SHOPIFY_APP_URL": "https://tcesq-staging.87997fc2724b0127effb8e4524989975.workers.dev"
       },
       "d1_databases": [
         {
           "binding": "D1",
-          "database_name": "tcesa-d1-staging",
+          "database_name": "tcesq-d1-staging",
           "database_id": "6ad1be42-e90e-41fb-83d6-2848f77dcd4f"
         }
       ],
     },
     "production": {
-      "name": "tcesa",
+      "name": "tcesq",
       "vars": {
         "ENVIRONMENT": "production",
-        "SHOPIFY_APP_URL": "https://tcesa.87997fc2724b0127effb8e4524989975.workers.dev"
+        "SHOPIFY_APP_URL": "https://tcesq.87997fc2724b0127effb8e4524989975.workers.dev"
       },
       "d1_databases": [
         {
           "binding": "D1",
-          "database_name": "tcesa-d1-production",
+          "database_name": "tcesq-d1-production",
           "database_id": "797acfa1-083f-40c3-8331-c0b6539567d6"
         }
       ],
