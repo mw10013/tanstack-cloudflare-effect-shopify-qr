@@ -82,15 +82,6 @@ pnpm graphql-codegen    # Validate #graphql template literal strings against the
 - **Type imports**: Use `import type` for type-only imports when possible
 - **Path aliases**: Use `@/*` for `src/*` imports (configured in tsconfig.json)
 
-```ts
-import type { Stripe as StripeTypes } from "stripe";
-import * as React from "react";
-import * as TanStackRouter from "@tanstack/react-router";
-import * as TanStackStart from "@tanstack/react-start";
-import * as Stripe from "stripe";
-import * as z from "zod";
-```
-
 ## SQL Guidelines
 
 - Using sqlite with Cloudflare D1.
@@ -127,9 +118,6 @@ playwright-cli --session="$(pnpm port)-localdev" click "button.submit"
 playwright-cli session-list
 playwright-cli session-delete "$(pnpm port)-localdev"
 ```
-
-- Use `u@u.com` to login as user.
-- Use synth images in public to upload.
 
 ## Do Not Edit
 
