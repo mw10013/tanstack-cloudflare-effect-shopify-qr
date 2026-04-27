@@ -1,8 +1,15 @@
-import { Context, Effect, Layer, Option, Schema, SchemaTransformation } from "effect";
+import {
+  Context,
+  Effect,
+  Layer,
+  Option,
+  Schema,
+  SchemaTransformation,
+} from "effect";
 
 import * as Domain from "@/lib/Domain";
-import { ShopifyAdmin } from "@/lib/ShopifyAdmin";
 import { ShopifyError } from "@/lib/Shopify";
+import { ShopifyAdmin } from "@/lib/ShopifyAdmin";
 
 const METAOBJECT_TYPE = "$app:qrcode";
 
@@ -36,7 +43,10 @@ const JsonValue = <S extends Schema.Top>(inner: S) =>
  * change runtime behavior and concrete schemas still expose the wrapped inner
  * type after decoding.
  */
-const NullableJsonValue = <S extends Schema.Top>(inner: S, fallback: S["Type"]) =>
+const NullableJsonValue = <S extends Schema.Top>(
+  inner: S,
+  fallback: S["Type"],
+) =>
   Schema.NullOr(Schema.Struct({ jsonValue: inner })).pipe(
     Schema.decodeTo(
       inner,
@@ -56,7 +66,10 @@ const ProductReference = Schema.Struct({
       Schema.Struct({
         preview: Schema.Struct({
           image: Schema.NullOr(
-            Schema.Struct({ url: Schema.String, altText: Schema.NullOr(Schema.String) }),
+            Schema.Struct({
+              url: Schema.String,
+              altText: Schema.NullOr(Schema.String),
+            }),
           ),
         }),
       }),
@@ -83,7 +96,10 @@ const ProductFieldShape = Schema.NullOr(
 const ProductBlock = ProductFieldShape.pipe(
   Schema.decodeTo(
     ProductFlat,
-    SchemaTransformation.transform<typeof ProductFlat.Type, typeof ProductFieldShape.Type>({
+    SchemaTransformation.transform<
+      typeof ProductFlat.Type,
+      typeof ProductFieldShape.Type
+    >({
       decode: (field) => {
         const productId = field?.jsonValue ?? "";
         const reference = field?.reference ?? null;
@@ -119,7 +135,10 @@ const VariantFieldShape = Schema.NullOr(
 const VariantBlock = VariantFieldShape.pipe(
   Schema.decodeTo(
     VariantFlat,
-    SchemaTransformation.transform<typeof VariantFlat.Type, typeof VariantFieldShape.Type>({
+    SchemaTransformation.transform<
+      typeof VariantFlat.Type,
+      typeof VariantFieldShape.Type
+    >({
       decode: (field) => {
         const reference = field?.reference ?? null;
         return {
@@ -226,7 +245,10 @@ const QrMetaobject = Schema.Struct({
 const QrCodeFromMetaobject = Schema.toType(QrMetaobject).pipe(
   Schema.decodeTo(
     Domain.QrCode,
-    SchemaTransformation.transform<typeof Domain.QrCode.Encoded, typeof QrMetaobject.Type>({
+    SchemaTransformation.transform<
+      typeof Domain.QrCode.Encoded,
+      typeof QrMetaobject.Type
+    >({
       decode: (m) => ({
         id: m.id,
         handle: m.handle,
@@ -276,7 +298,9 @@ const UserError = Schema.Struct({
 
 const SaveQrCodeResponse = Schema.Struct({
   metaobjectUpsert: Schema.Struct({
-    metaobject: Schema.NullOr(Schema.Struct({ id: Schema.String, handle: Schema.String })),
+    metaobject: Schema.NullOr(
+      Schema.Struct({ id: Schema.String, handle: Schema.String }),
+    ),
     userErrors: Schema.Array(UserError),
   }),
 });
@@ -297,30 +321,37 @@ const IncrementScansResponse = Schema.Struct({
 
 const decodeQrCode = (input: unknown) =>
   Schema.decodeUnknownEffect(QrCodeFromMetaobject)(input).pipe(
-    Effect.tapError((cause) =>
-      Effect.sync(() => {
-        console.error("[QrRepository] Invalid QR code metaobject", { cause: String(cause), input });
-      }),
-    ),
     Effect.mapError(
-      (cause) => new QrRepositoryError({ message: `Invalid QR code metaobject: ${String(cause)}`, cause }),
+      (cause) =>
+        new QrRepositoryError({ message: `Invalid QR code metaobject`, cause }),
     ),
   );
 
 const decodeSavedQrCode = (input: unknown) =>
-  Schema.decodeUnknownEffect(Schema.Struct({ id: Domain.QrCodeId, handle: Domain.QrCodeHandle }))(input).pipe(
+  Schema.decodeUnknownEffect(
+    Schema.Struct({ id: Domain.QrCodeId, handle: Domain.QrCodeHandle }),
+  )(input).pipe(
     Effect.tapError((cause) =>
       Effect.sync(() => {
-        console.error("[QrRepository] Invalid saved QR code metaobject", { cause: String(cause), input });
+        console.error("[QrRepository] Invalid saved QR code metaobject", {
+          cause: String(cause),
+          input,
+        });
       }),
     ),
     Effect.mapError(
       (cause) =>
-        new QrRepositoryError({ message: `Invalid saved QR code metaobject: ${String(cause)}`, cause }),
+        new QrRepositoryError({
+          message: `Invalid saved QR code metaobject: ${String(cause)}`,
+          cause,
+        }),
     ),
   );
 
-const failUserError = (operation: string, userErrors: readonly typeof UserError.Type[]) =>
+const failUserError = (
+  operation: string,
+  userErrors: readonly (typeof UserError.Type)[],
+) =>
   Effect.fail(
     new ShopifyError({
       message: userErrors[0]?.message ?? `${operation} failed`,
@@ -334,7 +365,9 @@ export class QrRepository extends Context.Service<QrRepository>()(
     make: Effect.gen(function* () {
       const admin = yield* ShopifyAdmin;
 
-      const findByHandle = Effect.fn("QrRepository.findByHandle")(function* (handle: Domain.QrCodeHandle) {
+      const findByHandle = Effect.fn("QrRepository.findByHandle")(function* (
+        handle: Domain.QrCodeHandle,
+      ) {
         const result = yield* admin.graphqlDecode(
           GetQrCodeResponse,
           `#graphql
@@ -372,7 +405,9 @@ export class QrRepository extends Context.Service<QrRepository>()(
           { variables: { handle: { type: METAOBJECT_TYPE, handle } } },
         );
         if (result.metaobjectByHandle === null) return Option.none();
-        return yield* decodeQrCode(result.metaobjectByHandle).pipe(Effect.map(Option.some));
+        return yield* decodeQrCode(result.metaobjectByHandle).pipe(
+          Effect.map(Option.some),
+        );
       });
 
       const list = Effect.fn("QrRepository.list")(function* () {
@@ -417,7 +452,10 @@ export class QrRepository extends Context.Service<QrRepository>()(
         return yield* Effect.all(result.metaobjects.nodes.map(decodeQrCode));
       });
 
-      const save = Effect.fn("QrRepository.save")(function* (handle: Domain.QrCodeHandle, input: Domain.QrCodeUpsert) {
+      const save = Effect.fn("QrRepository.save")(function* (
+        handle: Domain.QrCodeHandle,
+        input: Domain.QrCodeUpsert,
+      ) {
         const result = yield* admin.graphqlDecode(
           SaveQrCodeResponse,
           `#graphql
@@ -442,15 +480,25 @@ export class QrRepository extends Context.Service<QrRepository>()(
           },
         );
         if (result.metaobjectUpsert.userErrors.length > 0) {
-          return yield* failUserError("Save QR code", result.metaobjectUpsert.userErrors);
+          return yield* failUserError(
+            "Save QR code",
+            result.metaobjectUpsert.userErrors,
+          );
         }
         if (result.metaobjectUpsert.metaobject === null) {
-          return yield* Effect.fail(new ShopifyError({ message: "Save QR code returned no metaobject", cause: result }));
+          return yield* Effect.fail(
+            new ShopifyError({
+              message: "Save QR code returned no metaobject",
+              cause: result,
+            }),
+          );
         }
         return yield* decodeSavedQrCode(result.metaobjectUpsert.metaobject);
       });
 
-      const deleteById = Effect.fn("QrRepository.deleteById")(function* (id: Domain.QrCodeId) {
+      const deleteById = Effect.fn("QrRepository.deleteById")(function* (
+        id: Domain.QrCodeId,
+      ) {
         const result = yield* admin.graphqlDecode(
           DeleteQrCodeResponse,
           `#graphql
@@ -463,29 +511,41 @@ export class QrRepository extends Context.Service<QrRepository>()(
           { variables: { id } },
         );
         if (result.metaobjectDelete.userErrors.length > 0) {
-          return yield* failUserError("Delete QR code", result.metaobjectDelete.userErrors);
+          return yield* failUserError(
+            "Delete QR code",
+            result.metaobjectDelete.userErrors,
+          );
         }
       });
 
-      const incrementScans = Effect.fn("QrRepository.incrementScans")(function* (
-        id: Domain.QrCodeId,
-        currentScans: Domain.QrCode["scans"],
-      ) {
-        const result = yield* admin.graphqlDecode(
-          IncrementScansResponse,
-          `#graphql
+      const incrementScans = Effect.fn("QrRepository.incrementScans")(
+        function* (id: Domain.QrCodeId, currentScans: Domain.QrCode["scans"]) {
+          const result = yield* admin.graphqlDecode(
+            IncrementScansResponse,
+            `#graphql
           mutation IncrementScans($id: ID!, $metaobject: MetaobjectUpdateInput!) {
             metaobjectUpdate(id: $id, metaobject: $metaobject) {
               metaobject { id }
               userErrors { field message }
             }
           }`,
-          { variables: { id, metaobject: { fields: [{ key: "scans", value: String(currentScans + 1) }] } } },
-        );
-        if (result.metaobjectUpdate.userErrors.length > 0) {
-          return yield* failUserError("Increment QR code scans", result.metaobjectUpdate.userErrors);
-        }
-      });
+            {
+              variables: {
+                id,
+                metaobject: {
+                  fields: [{ key: "scans", value: String(currentScans + 1) }],
+                },
+              },
+            },
+          );
+          if (result.metaobjectUpdate.userErrors.length > 0) {
+            return yield* failUserError(
+              "Increment QR code scans",
+              result.metaobjectUpdate.userErrors,
+            );
+          }
+        },
+      );
 
       return { findByHandle, list, save, deleteById, incrementScans };
     }),
