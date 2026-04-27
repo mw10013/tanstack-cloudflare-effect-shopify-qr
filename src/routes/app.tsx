@@ -118,6 +118,7 @@ function AppLayout() {
     <AppProvider embedded apiKey={apiKey}>
       <s-app-nav>
         <s-link href={`/app${searchStr}`}>Home</s-link>
+        <s-link href={`/app/template-demo${searchStr}`}>Template demo</s-link>
         <s-link href={`/app/additional${searchStr}`}>Additional page</s-link>
       </s-app-nav>
       <Outlet />

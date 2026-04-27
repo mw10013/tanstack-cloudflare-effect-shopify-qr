@@ -14,6 +14,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as AuthLoginRouteImport } from './routes/auth.login'
 import { Route as AuthSplatRouteImport } from './routes/auth.$'
+import { Route as AppTemplateDemoRouteImport } from './routes/app.template-demo'
 import { Route as AppAdditionalRouteImport } from './routes/app.additional'
 import { Route as WebhooksAppUninstalledRouteImport } from './routes/webhooks.app.uninstalled'
 import { Route as WebhooksAppScopes_updateRouteImport } from './routes/webhooks.app.scopes_update'
@@ -44,6 +45,11 @@ const AuthSplatRoute = AuthSplatRouteImport.update({
   id: '/auth/$',
   path: '/auth/$',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppTemplateDemoRoute = AppTemplateDemoRouteImport.update({
+  id: '/template-demo',
+  path: '/template-demo',
+  getParentRoute: () => AppRoute,
 } as any)
 const AppAdditionalRoute = AppAdditionalRouteImport.update({
   id: '/additional',
@@ -76,6 +82,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/app/additional': typeof AppAdditionalRoute
+  '/app/template-demo': typeof AppTemplateDemoRoute
   '/auth/$': typeof AuthSplatRoute
   '/auth/login': typeof AuthLoginRoute
   '/app/': typeof AppIndexRoute
@@ -87,6 +94,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/app/additional': typeof AppAdditionalRoute
+  '/app/template-demo': typeof AppTemplateDemoRoute
   '/auth/$': typeof AuthSplatRoute
   '/auth/login': typeof AuthLoginRoute
   '/app': typeof AppIndexRoute
@@ -100,6 +108,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/app/additional': typeof AppAdditionalRoute
+  '/app/template-demo': typeof AppTemplateDemoRoute
   '/auth/$': typeof AuthSplatRoute
   '/auth/login': typeof AuthLoginRoute
   '/app/': typeof AppIndexRoute
@@ -114,6 +123,7 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/app/additional'
+    | '/app/template-demo'
     | '/auth/$'
     | '/auth/login'
     | '/app/'
@@ -125,6 +135,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/app/additional'
+    | '/app/template-demo'
     | '/auth/$'
     | '/auth/login'
     | '/app'
@@ -137,6 +148,7 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/app/additional'
+    | '/app/template-demo'
     | '/auth/$'
     | '/auth/login'
     | '/app/'
@@ -193,6 +205,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/app/template-demo': {
+      id: '/app/template-demo'
+      path: '/template-demo'
+      fullPath: '/app/template-demo'
+      preLoaderRoute: typeof AppTemplateDemoRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/additional': {
       id: '/app/additional'
       path: '/additional'
@@ -233,12 +252,14 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppAdditionalRoute: typeof AppAdditionalRoute
+  AppTemplateDemoRoute: typeof AppTemplateDemoRoute
   AppIndexRoute: typeof AppIndexRoute
   AppQrcodesIdRoute: typeof AppQrcodesIdRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppAdditionalRoute: AppAdditionalRoute,
+  AppTemplateDemoRoute: AppTemplateDemoRoute,
   AppIndexRoute: AppIndexRoute,
   AppQrcodesIdRoute: AppQrcodesIdRoute,
 }
