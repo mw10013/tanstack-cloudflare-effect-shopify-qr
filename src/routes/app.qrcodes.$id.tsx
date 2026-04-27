@@ -351,7 +351,21 @@ function QrCodeForm() {
               </s-box>
               <s-stack gap="small" direction="inline" alignItems="center" justifyContent="space-between">
                 <s-button disabled={!loaderData.handle} href={loaderData.scanUrl ?? undefined} target="_blank">Go to public URL</s-button>
-                <s-button disabled={!loaderData.image} href={loaderData.image ?? undefined} download="" variant="primary">Download</s-button>
+                <s-button
+                  disabled={!loaderData.image}
+                  onClick={() => {
+                    if (!loaderData.image) return;
+                    const a = document.createElement("a");
+                    a.href = loaderData.image;
+                    a.download = `${loaderData.handle ?? "qr-code"}.png`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                  }}
+                  variant="primary"
+                >
+                  Download
+                </s-button>
               </s-stack>
             </s-stack>
           </s-section>
