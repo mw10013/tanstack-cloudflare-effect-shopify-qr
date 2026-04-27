@@ -354,13 +354,21 @@ function QrCodeForm() {
                 <s-button
                   disabled={!loaderData.image}
                   onClick={() => {
+                    /**
+                     * The reference app uses <s-button href={image} download>, but Shopify's
+                     * App Bridge web component handles href as navigation and does not reliably
+                     * forward download to a native anchor. Clicking a data URL then opens a blank
+                     * page instead of saving the QR image. A temporary native anchor preserves the
+                     * Polaris button UI while using browser download behavior directly.
+                     */
                     if (!loaderData.image) return;
                     const a = document.createElement("a");
                     a.href = loaderData.image;
                     a.download = `${loaderData.handle ?? "qr-code"}.png`;
+                    // oxlint-disable-next-line unicorn/prefer-dom-node-append -- document.body.append is typed as Body.append in this Cloudflare DOM mix.
                     document.body.appendChild(a);
                     a.click();
-                    document.body.removeChild(a);
+                    a.remove();
                   }}
                   variant="primary"
                 >
