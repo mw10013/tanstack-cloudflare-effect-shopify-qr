@@ -2,9 +2,9 @@
 
 ## Problem
 
-Clicking the Download button opens a new blank page instead of downloading the QR code image.
+Clicking the Download button opened a new blank page instead of downloading the QR code image.
 
-**Button code** (`src/routes/app.qrcodes.$id.tsx:354`):
+**Original button code** (`src/routes/app.qrcodes.$id.tsx:354`):
 
 ```jsx
 <s-button disabled={!loaderData.image} href={loaderData.image ?? undefined} download="" variant="primary">Download</s-button>
@@ -69,11 +69,11 @@ The reference app uses the basic documented `s-button href + download` approach.
 
 So the reference app is not using the programmatic temporary-anchor workaround. It uses the idiomatic Shopify web component API, but with boolean `download` rather than a filename string.
 
-## Updated Assessment
+## Assessment
 
 The earlier root-cause theory that `s-button` does not support or forward `download` is off. Current Shopify docs explicitly list `download` on `s-button`, and mention `data:` URLs as a case where filename suggestions are respected.
 
-The first fix should be to keep the idiomatic `s-button href + download` approach, but pass a filename string instead of an empty string or boolean:
+The fix is to keep the idiomatic `s-button href + download` approach, but pass a filename string instead of an empty string or boolean:
 
 ```jsx
 <s-button
@@ -86,7 +86,7 @@ The first fix should be to keep the idiomatic `s-button href + download` approac
 </s-button>
 ```
 
-This matches Shopify's documented API and improves the reference implementation by providing the suggested filename.
+This matches Shopify's documented API and the reference app's structure while improving the reference implementation by providing the suggested filename.
 
 ## If Runtime Still Fails
 
