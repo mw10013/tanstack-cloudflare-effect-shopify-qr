@@ -1,6 +1,6 @@
-# tanstack-cloudflare-effect-shopify-app
+# tanstack-cloudflare-effect-shopify-qr
 
-Port of the Shopify App Template to TanStack Start + Cloudflare Workers + Effect v4.
+Port of the Shopify QR Example to TanStack Start + Cloudflare Workers + Effect v4.
 
 ## Local development
 

@@ -1,7 +1,7 @@
 name = "tcesq"
 roles = ["frontend", "backend"]
 webhooks_path = "/webhooks/app/uninstalled"
-port = 3200
+port = 3300
 
 [commands]
 # Why this command uses `env CLOUDFLARE_INCLUDE_PROCESS_ENV=true`:
