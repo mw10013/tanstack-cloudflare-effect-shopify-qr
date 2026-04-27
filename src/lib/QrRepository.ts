@@ -14,6 +14,12 @@ export class QrRepositoryError extends Schema.TaggedErrorClass<QrRepositoryError
   },
 ) {}
 
+/**
+ * The `as never` cast is limited to the generic helper boundary. Effect Schema's
+ * `Struct` type uses conditional machinery that TypeScript cannot reduce while
+ * `inner` is still generic, even though concrete call sites infer correctly.
+ * The annotated decode/encode parameters keep the transformation body typed.
+ */
 const JsonValue = <S extends Schema.Top>(inner: S) =>
   Schema.Struct({ jsonValue: inner }).pipe(
     Schema.decodeTo(
@@ -25,6 +31,11 @@ const JsonValue = <S extends Schema.Top>(inner: S) =>
     ),
   );
 
+/**
+ * Same generic `Struct` inference limitation as `JsonValue`; the cast does not
+ * change runtime behavior and concrete schemas still expose the wrapped inner
+ * type after decoding.
+ */
 const NullableJsonValue = <S extends Schema.Top>(inner: S, fallback: S["Type"]) =>
   Schema.NullOr(Schema.Struct({ jsonValue: inner })).pipe(
     Schema.decodeTo(
