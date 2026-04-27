@@ -16,6 +16,17 @@ export type ProductId = typeof ProductId.Type;
 export const VariantId = Schema.NonEmptyString.pipe(Schema.brand("VariantId"));
 export type VariantId = typeof VariantId.Type;
 
+export const QrCodeId = Schema.NonEmptyString.pipe(Schema.brand("QrCodeId"));
+export type QrCodeId = typeof QrCodeId.Type;
+
+export const QrCodeHandle = Schema.NonEmptyString.pipe(
+  Schema.brand("QrCodeHandle"),
+);
+export type QrCodeHandle = typeof QrCodeHandle.Type;
+
+export const QrCodeDestination = Schema.Literals(["product", "cart"]);
+export type QrCodeDestination = typeof QrCodeDestination.Type;
+
 export const ProductStatus = Schema.Literals(["ACTIVE", "DRAFT", "ARCHIVED", "UNLISTED"]);
 export type ProductStatus = typeof ProductStatus.Type;
 
@@ -37,6 +48,32 @@ export const Product = Schema.Struct({
   }),
 });
 export type Product = typeof Product.Type;
+
+export const QrCode = Schema.Struct({
+  id: QrCodeId,
+  handle: QrCodeHandle,
+  title: Schema.String,
+  productId: ProductId,
+  productVariantId: VariantId,
+  productHandle: Schema.NullOr(Schema.String),
+  productVariantLegacyId: Schema.NullOr(Schema.String),
+  destination: QrCodeDestination,
+  scans: Schema.Number,
+  createdAt: Schema.String,
+  productDeleted: Schema.Boolean,
+  productTitle: Schema.NullOr(Schema.String),
+  productImage: Schema.NullOr(Schema.String),
+  productAlt: Schema.NullOr(Schema.String),
+});
+export type QrCode = typeof QrCode.Type;
+
+export const QrCodeUpsert = Schema.Struct({
+  title: Schema.String,
+  productId: ProductId,
+  productVariantId: VariantId,
+  destination: QrCodeDestination,
+});
+export type QrCodeUpsert = typeof QrCodeUpsert.Type;
 
 export const Session = Schema.Struct({
   id: SessionId,
