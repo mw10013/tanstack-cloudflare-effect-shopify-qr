@@ -5,6 +5,8 @@ import { Effect, Layer } from "effect";
 import { CurrentRequest } from "@/lib/CurrentRequest";
 import { CurrentSession } from "@/lib/CurrentSession";
 import { ProductRepository } from "@/lib/ProductRepository";
+import { QrRepository } from "@/lib/QrRepository";
+import { QrService } from "@/lib/QrService";
 import { Shopify } from "@/lib/Shopify";
 import { ShopifyAdmin } from "@/lib/ShopifyAdmin";
 
@@ -58,8 +60,18 @@ export const shopifyServerFnMiddleware = createMiddleware({ type: "function" })
         const currentSessionLayer = Layer.succeed(CurrentSession, session);
         const shopifyAdminLayer = Layer.provide(ShopifyAdmin.layer, currentSessionLayer);
         const productRepositoryLayer = Layer.provide(ProductRepository.layer, shopifyAdminLayer);
-        const serverFnLayer = Layer.mergeAll(currentSessionLayer, shopifyAdminLayer, productRepositoryLayer);
-        const runEffect = <A, E>(effect: Effect.Effect<A, E, ProductRepository | ShopifyAdmin | CurrentSession>) =>
+        const qrRepositoryLayer = Layer.provide(QrRepository.layer, shopifyAdminLayer);
+        const qrServiceLayer = Layer.provide(QrService.layer, qrRepositoryLayer);
+        const serverFnLayer = Layer.mergeAll(
+          currentSessionLayer,
+          shopifyAdminLayer,
+          productRepositoryLayer,
+          qrRepositoryLayer,
+          qrServiceLayer,
+        );
+        const runEffect = <A, E>(
+          effect: Effect.Effect<A, E, ProductRepository | QrRepository | QrService | ShopifyAdmin | CurrentSession>,
+        ) =>
           context.runEffect(effect.pipe(Effect.provide(serverFnLayer)));
 
         return yield* Effect.tryPromise({

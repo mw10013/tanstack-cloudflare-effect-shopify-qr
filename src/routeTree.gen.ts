@@ -17,6 +17,8 @@ import { Route as AuthSplatRouteImport } from './routes/auth.$'
 import { Route as AppAdditionalRouteImport } from './routes/app.additional'
 import { Route as WebhooksAppUninstalledRouteImport } from './routes/webhooks.app.uninstalled'
 import { Route as WebhooksAppScopes_updateRouteImport } from './routes/webhooks.app.scopes_update'
+import { Route as QrcodesIdScanRouteImport } from './routes/qrcodes.$id.scan'
+import { Route as AppQrcodesIdRouteImport } from './routes/app.qrcodes.$id'
 
 const AppRoute = AppRouteImport.update({
   id: '/app',
@@ -59,6 +61,16 @@ const WebhooksAppScopes_updateRoute =
     path: '/webhooks/app/scopes_update',
     getParentRoute: () => rootRouteImport,
   } as any)
+const QrcodesIdScanRoute = QrcodesIdScanRouteImport.update({
+  id: '/qrcodes/$id/scan',
+  path: '/qrcodes/$id/scan',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppQrcodesIdRoute = AppQrcodesIdRouteImport.update({
+  id: '/qrcodes/$id',
+  path: '/qrcodes/$id',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -67,6 +79,8 @@ export interface FileRoutesByFullPath {
   '/auth/$': typeof AuthSplatRoute
   '/auth/login': typeof AuthLoginRoute
   '/app/': typeof AppIndexRoute
+  '/app/qrcodes/$id': typeof AppQrcodesIdRoute
+  '/qrcodes/$id/scan': typeof QrcodesIdScanRoute
   '/webhooks/app/scopes_update': typeof WebhooksAppScopes_updateRoute
   '/webhooks/app/uninstalled': typeof WebhooksAppUninstalledRoute
 }
@@ -76,6 +90,8 @@ export interface FileRoutesByTo {
   '/auth/$': typeof AuthSplatRoute
   '/auth/login': typeof AuthLoginRoute
   '/app': typeof AppIndexRoute
+  '/app/qrcodes/$id': typeof AppQrcodesIdRoute
+  '/qrcodes/$id/scan': typeof QrcodesIdScanRoute
   '/webhooks/app/scopes_update': typeof WebhooksAppScopes_updateRoute
   '/webhooks/app/uninstalled': typeof WebhooksAppUninstalledRoute
 }
@@ -87,6 +103,8 @@ export interface FileRoutesById {
   '/auth/$': typeof AuthSplatRoute
   '/auth/login': typeof AuthLoginRoute
   '/app/': typeof AppIndexRoute
+  '/app/qrcodes/$id': typeof AppQrcodesIdRoute
+  '/qrcodes/$id/scan': typeof QrcodesIdScanRoute
   '/webhooks/app/scopes_update': typeof WebhooksAppScopes_updateRoute
   '/webhooks/app/uninstalled': typeof WebhooksAppUninstalledRoute
 }
@@ -99,6 +117,8 @@ export interface FileRouteTypes {
     | '/auth/$'
     | '/auth/login'
     | '/app/'
+    | '/app/qrcodes/$id'
+    | '/qrcodes/$id/scan'
     | '/webhooks/app/scopes_update'
     | '/webhooks/app/uninstalled'
   fileRoutesByTo: FileRoutesByTo
@@ -108,6 +128,8 @@ export interface FileRouteTypes {
     | '/auth/$'
     | '/auth/login'
     | '/app'
+    | '/app/qrcodes/$id'
+    | '/qrcodes/$id/scan'
     | '/webhooks/app/scopes_update'
     | '/webhooks/app/uninstalled'
   id:
@@ -118,6 +140,8 @@ export interface FileRouteTypes {
     | '/auth/$'
     | '/auth/login'
     | '/app/'
+    | '/app/qrcodes/$id'
+    | '/qrcodes/$id/scan'
     | '/webhooks/app/scopes_update'
     | '/webhooks/app/uninstalled'
   fileRoutesById: FileRoutesById
@@ -127,6 +151,7 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   AuthSplatRoute: typeof AuthSplatRoute
   AuthLoginRoute: typeof AuthLoginRoute
+  QrcodesIdScanRoute: typeof QrcodesIdScanRoute
   WebhooksAppScopes_updateRoute: typeof WebhooksAppScopes_updateRoute
   WebhooksAppUninstalledRoute: typeof WebhooksAppUninstalledRoute
 }
@@ -189,17 +214,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WebhooksAppScopes_updateRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/qrcodes/$id/scan': {
+      id: '/qrcodes/$id/scan'
+      path: '/qrcodes/$id/scan'
+      fullPath: '/qrcodes/$id/scan'
+      preLoaderRoute: typeof QrcodesIdScanRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/qrcodes/$id': {
+      id: '/app/qrcodes/$id'
+      path: '/qrcodes/$id'
+      fullPath: '/app/qrcodes/$id'
+      preLoaderRoute: typeof AppQrcodesIdRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
 interface AppRouteChildren {
   AppAdditionalRoute: typeof AppAdditionalRoute
   AppIndexRoute: typeof AppIndexRoute
+  AppQrcodesIdRoute: typeof AppQrcodesIdRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppAdditionalRoute: AppAdditionalRoute,
   AppIndexRoute: AppIndexRoute,
+  AppQrcodesIdRoute: AppQrcodesIdRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
@@ -209,6 +250,7 @@ const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   AuthSplatRoute: AuthSplatRoute,
   AuthLoginRoute: AuthLoginRoute,
+  QrcodesIdScanRoute: QrcodesIdScanRoute,
   WebhooksAppScopes_updateRoute: WebhooksAppScopes_updateRoute,
   WebhooksAppUninstalledRoute: WebhooksAppUninstalledRoute,
 }
