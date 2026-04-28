@@ -18,10 +18,9 @@ export class ShopifyAdmin extends Context.Service<ShopifyAdmin>()("ShopifyAdmin"
     ) {
       const { data, errors } = yield* graphql(query, options);
       if (errors) yield* Effect.fail(new ShopifyError({ message: errors.message ?? "Admin GraphQL request failed", cause: errors }));
-      return yield* Effect.try({
-        try: () => Schema.decodeUnknownSync(schema)(data),
-        catch: (cause) => new ShopifyError({ message: "Admin GraphQL response validation failed", cause }),
-      });
+      return yield* Schema.decodeUnknownEffect(schema)(data).pipe(
+        Effect.mapError((cause) => new ShopifyError({ message: "Admin GraphQL response validation failed", cause })),
+      );
     });
     return { graphql, graphqlDecode };
   }),
