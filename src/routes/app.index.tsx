@@ -97,7 +97,7 @@ function AppIndex() {
 
   return (
     <s-page heading="QR codes">
-      <s-link slot="primary-action" href="/app/qrcodes/new">Create QR code</s-link>
+      <s-button slot="primary-action" href="/app/qrcodes/new" variant="primary">Create QR code</s-button>
       {qrCodes.length === 0 ? <EmptyQrCodeState /> : <QrCodeTable qrCodes={qrCodes} />}
     </s-page>
   );
