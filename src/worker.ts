@@ -29,6 +29,11 @@ const makeAppLayer = (env: Env, request: Request) => {
   );
 };
 
+const formatErrorMessage = (error: Error): string => {
+  const message = error.name && error.name !== "Error" ? `${error.name}: ${error.message}` : error.message;
+  return error.cause instanceof Error ? `${message}\n[cause]: ${formatErrorMessage(error.cause)}` : message;
+};
+
 /**
  * Builds a per-request `ManagedRuntime` and returns a `runEffect` function for
  * HTTP request handlers (fetch, server functions).
@@ -39,12 +44,10 @@ const makeAppLayer = (env: Env, request: Request) => {
  * on each invocation.
  *
  * `runEffect` converts Effect failures to throwable values compatible with
- * TanStack Start's server-function error serialization. Uses
- * `runPromiseExit` instead of `runPromise` to inspect the `Exit` and ensure
- * the thrown value is always an `Error` instance (which TanStack Start can
- * serialize via seroval). Raw non-Error values from `Effect.fail` would
- * otherwise pass through `Cause.squash` unboxed and fail the client-side
- * `instanceof Error` check, producing an opaque "unexpected error" message.
+ * TanStack Start's server-function error serialization. Uses `runPromiseExit`
+ * instead of `runPromise` so HTTP control-flow values can be preserved before
+ * ordinary failures are normalized to a plain `Error` instance that TanStack
+ * Start can serialize via seroval.
  *
  * Raw `Response` values, TanStack `redirect`, and TanStack `notFound` objects
  * are thrown as-is after `Cause.squash` so TanStack Start can route them
@@ -57,17 +60,15 @@ const makeAppLayer = (env: Env, request: Request) => {
  *
  * **Error message preservation:** TanStack Start server functions serialize
  * thrown `Error`s through the router-core `ShallowErrorPlugin`, which keeps
- * ONLY `.message`. `.name`, `._tag`, `.stack`, and all custom properties are
- * stripped, then the client reconstructs `new Error(message)`. Effect v4
- * errors often carry useful detail in `.cause`, and some set `.name` on the
- * prototype while leaving `.message` empty. To keep the client boundary useful,
- * `runEffect` normalizes thrown errors to have a non-empty `.message`: if the
- * squashed failure is an `UnknownError` wrapping an `Error`, it copies the
- * inner `cause.message`; otherwise it falls back to `Cause.pretty(exit.cause)`
- * when the squashed error has no message, or when the squashed value is not an
- * `Error`. The `Cause.pretty(...)` fallback is verbose and stack-like, but it
- * preserves detail that would otherwise be lost once Start strips everything
- * except `.message`.
+ * ONLY `.message`. `.name`, `._tag`, `.stack`, `.cause`, and custom properties
+ * are stripped, then the client reconstructs `new Error(message)`. Effect v4
+ * app errors intentionally carry useful root detail in `.cause`, while
+ * `UnknownError` from unannotated `Effect.tryPromise` is just a generic wrapper
+ * whose cause is usually the useful part. To keep the client boundary useful,
+ * non-control-flow failures are converted to a fresh `Error` whose message is a
+ * compact rendering of `Cause.prettyErrors(exit.cause)`: error names/messages
+ * plus nested `[cause]` chains, but not server stacks. This preserves details
+ * like schema paths without duplicating stack output in the browser/runtime.
  */
 const makeRunEffect = (env: Env, request: Request) => {
   const appLayer = makeAppLayer(env, request);
@@ -80,15 +81,8 @@ const makeRunEffect = (env: Env, request: Request) => {
     const squashed = Cause.squash(exit.cause);
     // oxlint-disable-next-line @typescript-eslint/only-throw-error -- redirect is a Response, notFound is a plain object; TanStack expects these thrown as-is
     if (squashed instanceof Response || isRedirect(squashed) || isNotFound(squashed)) throw squashed;
-    if (squashed instanceof Error) {
-      if (Cause.isUnknownError(squashed) && squashed.cause instanceof Error) {
-        squashed.message = squashed.cause.message;
-      } else if (!squashed.message) {
-        squashed.message = Cause.pretty(exit.cause);
-      }
-      throw squashed;
-    }
-    throw new Error(Cause.pretty(exit.cause));
+    const message = Cause.prettyErrors(exit.cause).map(formatErrorMessage).join("\n");
+    throw new Error(message);
   };
   return { runEffect, managedRuntime };
 };
