@@ -47,12 +47,12 @@ const NullableJsonValue = <S extends Schema.Top>(
   inner: S,
   fallback: S["Type"],
 ) =>
-  Schema.NullOr(Schema.Struct({ jsonValue: inner })).pipe(
+  Schema.NullOr(Schema.Struct({ jsonValue: Schema.NullOr(inner) })).pipe(
     Schema.decodeTo(
       inner,
       SchemaTransformation.transform({
-        decode: (field: { readonly jsonValue: S["Type"] } | null) =>
-          field === null ? fallback : field.jsonValue,
+        decode: (field: { readonly jsonValue: S["Type"] | null } | null) =>
+          field === null || field.jsonValue === null ? fallback : field.jsonValue,
         encode: (value: S["Type"]) => ({ jsonValue: value }),
       }) as never,
     ),
