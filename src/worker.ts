@@ -43,11 +43,10 @@ const formatErrorMessage = (error: Error): string => {
  * across every `runEffect` call within that request, rather than being rebuilt
  * on each invocation.
  *
- * `runEffect` converts Effect failures to throwable values compatible with
- * TanStack Start's server-function error serialization. Uses `runPromiseExit`
- * instead of `runPromise` so HTTP control-flow values can be preserved before
- * ordinary failures are normalized to a plain `Error` instance that TanStack
- * Start can serialize via seroval.
+ * `runEffect` uses `runPromiseExit` instead of `runPromise` so it can inspect
+ * failures before deciding what to throw. It has two jobs at this boundary:
+ * preserve HTTP control flow, and turn ordinary Effect failures into useful
+ * TanStack-serializable diagnostics.
  *
  * Raw `Response` values, TanStack `redirect`, and TanStack `notFound` objects
  * are thrown as-is after `Cause.squash` so TanStack Start can route them
@@ -58,17 +57,27 @@ const formatErrorMessage = (error: Error): string => {
  * control flow because there is exactly one HTTP-relevant value in the Cause
  * for these cases.
  *
- * **Error message preservation:** TanStack Start server functions serialize
- * thrown `Error`s through the router-core `ShallowErrorPlugin`, which keeps
- * ONLY `.message`. `.name`, `._tag`, `.stack`, `.cause`, and custom properties
- * are stripped, then the client reconstructs `new Error(message)`. Effect v4
- * app errors intentionally carry useful root detail in `.cause`, while
- * `UnknownError` from unannotated `Effect.tryPromise` is just a generic wrapper
- * whose cause is usually the useful part. To keep the client boundary useful,
- * non-control-flow failures are converted to a fresh `Error` whose message is a
- * compact rendering of `Cause.prettyErrors(exit.cause)`: error names/messages
- * plus nested `[cause]` chains, but not server stacks. This preserves details
- * like schema paths without duplicating stack output in the browser/runtime.
+ * `Cause.squash` returns `unknown`: the first typed failure, first defect, or a
+ * synthetic interrupt/empty-cause `Error`. That value can be an `Error`, string,
+ * plain object, Effect `TaggedError`, Shopify result object, or anything else
+ * user code failed/died with. After HTTP control flow is detected, `runEffect`
+ * intentionally does not throw `squashed`.
+ *
+ * TanStack Start server functions serialize thrown `Error`s through the
+ * router-core `ShallowErrorPlugin`, which keeps ONLY `.message`. `.name`,
+ * `._tag`, `.stack`, `.cause`, and custom properties are stripped, then the
+ * client reconstructs `new Error(message)`. Effect v4 app errors intentionally
+ * carry useful root detail in `.cause`, while `UnknownError` from unannotated
+ * `Effect.tryPromise` is just a generic wrapper whose cause is usually the
+ * useful part.
+ *
+ * Non-control-flow failures are therefore converted to a fresh `Error` whose
+ * message is a compact rendering of `Cause.prettyErrors(exit.cause)`: error
+ * names/messages plus nested `[cause]` chains, but not server stacks.
+ * `prettyErrors` normalizes arbitrary failures/defects into `Error` values, so
+ * strings, primitives, plain objects, `Error` subclasses, and nested causes all
+ * contribute useful diagnostic text. This preserves details like schema paths
+ * without duplicating stack output in the browser/runtime.
  */
 const makeRunEffect = (env: Env, request: Request) => {
   const appLayer = makeAppLayer(env, request);
