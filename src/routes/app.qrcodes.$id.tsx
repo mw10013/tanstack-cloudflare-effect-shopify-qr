@@ -200,7 +200,10 @@ function QrCodeForm() {
             setServerErrors(Object.fromEntries(Object.entries(result.errors).filter((entry): entry is [string, string] => entry[1] !== undefined)));
             return;
           }
-          void navigate({ to: "/app/qrcodes/$id", params: { id: result.handle } });
+          if (id === "new") {
+            saveBarRef.current?.hide();
+            void navigate({ to: "/app" });
+          } else void navigate({ to: "/app/qrcodes/$id", params: { id: result.handle } });
         })
         .finally(() => {
           setIsSaving(false);
