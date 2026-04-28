@@ -1,4 +1,5 @@
 import * as React from "react";
+import { SaveBar, useAppBridge } from "@shopify/app-bridge-react";
 import { useForm } from "@tanstack/react-form";
 import { useHydrated } from "@tanstack/react-router";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
@@ -10,17 +11,6 @@ import { QrRepository } from "@/lib/QrRepository";
 import { QrService } from "@/lib/QrService";
 import { CurrentSession } from "@/lib/CurrentSession";
 import { shopifyServerFnMiddleware } from "@/lib/ShopifyServerFnMiddleware";
-
-declare module "react" {
-  // oxlint-disable-next-line typescript-eslint/no-namespace -- React JSX augmentation
-  namespace JSX {
-    interface IntrinsicElements {
-      "ui-save-bar": React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
-        ref?: React.Ref<HTMLElement & { show: () => void; hide: () => void }>;
-      };
-    }
-  }
-}
 
 interface ShopifyPickerProduct {
   readonly id: string;
@@ -170,8 +160,8 @@ function QrCodeForm() {
   const loaderData = Route.useLoaderData();
   const { id } = Route.useParams();
   const navigate = useNavigate();
+  const shopify = useAppBridge();
   const isHydrated = useHydrated();
-  const saveBarRef = React.useRef<HTMLElement & { show: () => void; hide: () => void }>(null);
   const defaultValues = React.useMemo(() => ({
     routeId: id,
     title: loaderData.title,
@@ -201,8 +191,7 @@ function QrCodeForm() {
             return;
           }
           if (id === "new") {
-            saveBarRef.current?.hide();
-            void navigate({ to: "/app" });
+            void shopify.saveBar.hide("qr-code-form").then(() => navigate({ to: "/app" }));
           } else void navigate({ to: "/app/qrcodes/$id", params: { id: result.handle } });
         })
         .finally(() => {
@@ -220,11 +209,6 @@ function QrCodeForm() {
     setSelectedProduct({ title: loaderData.productTitle, image: loaderData.productImage, alt: loaderData.productAlt });
     setServerErrors({});
   }, [defaultValues, form, loaderData.productAlt, loaderData.productImage, loaderData.productTitle]);
-
-  React.useEffect(() => {
-    if (isDirty) saveBarRef.current?.show();
-    else saveBarRef.current?.hide();
-  }, [isDirty]);
 
   const selectProduct = () => {
     const picker = window.shopify?.resourcePicker;
@@ -269,10 +253,10 @@ function QrCodeForm() {
 
   return (
     <>
-      <ui-save-bar ref={saveBarRef} id="qr-code-form">
+      <SaveBar id="qr-code-form" open={isDirty}>
         <button variant="primary" onClick={() => void form.handleSubmit()} disabled={isSaving} />
         <button onClick={reset} />
-      </ui-save-bar>
+      </SaveBar>
       <s-page heading={loaderData.handle ? loaderData.title : "Create QR code"}>
         <s-link href="/app" slot="breadcrumb-actions">QR codes</s-link>
         {loaderData.id && isHydrated && (
