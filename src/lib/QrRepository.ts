@@ -205,6 +205,7 @@ const VariantBlock = VariantFieldShape.pipe(
  */
 const QrMetaobject = Schema.Struct({
   id: Schema.String,
+  boom: Schema.String,
   handle: Schema.String,
   createdAt: Schema.String,
   title: NullableJsonValue(Schema.String, ""),

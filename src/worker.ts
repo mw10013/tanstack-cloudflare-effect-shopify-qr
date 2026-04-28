@@ -39,12 +39,12 @@ const makeAppLayer = (env: Env, request: Request) => {
  * on each invocation.
  *
  * `runEffect` converts Effect failures to throwable values compatible with
- * TanStack Start's server function error serialization. Uses `runPromiseExit`
- * instead of `runPromise` to inspect the `Exit` and ensure the thrown value is
- * always an `Error` instance (which TanStack Start can serialize via seroval).
- * Raw non-Error values from `Effect.fail` would otherwise pass through
- * `causeSquash` unboxed and fail the client-side `instanceof Error` check,
- * producing an opaque "unexpected error" message.
+ * TanStack Start's server-function error serialization. Uses
+ * `runPromiseExit` instead of `runPromise` to inspect the `Exit` and ensure
+ * the thrown value is always an `Error` instance (which TanStack Start can
+ * serialize via seroval). Raw non-Error values from `Effect.fail` would
+ * otherwise pass through `Cause.squash` unboxed and fail the client-side
+ * `instanceof Error` check, producing an opaque "unexpected error" message.
  *
  * Raw `Response` values, TanStack `redirect`, and TanStack `notFound` objects
  * are thrown as-is after `Cause.squash` so TanStack Start can route them
@@ -55,20 +55,19 @@ const makeAppLayer = (env: Env, request: Request) => {
  * control flow because there is exactly one HTTP-relevant value in the Cause
  * for these cases.
  *
- * **Error message preservation:** TanStack Router's `ShallowErrorPlugin`
- * (seroval plugin used during SSR dehydration) serializes ONLY `.message`
- * from Error objects — `.name`, `._tag`, `.stack`, and all custom properties
- * are stripped. On the client it reconstructs `new Error(message)`. Effect v4
- * errors like `NoSuchElementError` set `.name` on the prototype and often
- * have `.message = undefined` (own property via `Object.assign`), so after
- * dehydration the client receives a bare `Error` with an empty message.
- * To ensure the error boundary always has something meaningful to display,
- * we normalize the thrown Error to always carry a non-empty `.message`,
- * using `Cause.pretty` which includes the error name and server-side stack
- * trace. This causes some duplication in the browser (the client-generated
- * `.stack` echoes `.message` in V8 environments) but preserves the full
- * server context that would otherwise be lost after `ShallowErrorPlugin`
- * strips everything except `.message`.
+ * **Error message preservation:** TanStack Start server functions serialize
+ * thrown `Error`s through the router-core `ShallowErrorPlugin`, which keeps
+ * ONLY `.message`. `.name`, `._tag`, `.stack`, and all custom properties are
+ * stripped, then the client reconstructs `new Error(message)`. Effect v4
+ * errors often carry useful detail in `.cause`, and some set `.name` on the
+ * prototype while leaving `.message` empty. To keep the client boundary useful,
+ * `runEffect` normalizes thrown errors to have a non-empty `.message`: if the
+ * squashed failure is an `UnknownError` wrapping an `Error`, it copies the
+ * inner `cause.message`; otherwise it falls back to `Cause.pretty(exit.cause)`
+ * when the squashed error has no message, or when the squashed value is not an
+ * `Error`. The `Cause.pretty(...)` fallback is verbose and stack-like, but it
+ * preserves detail that would otherwise be lost once Start strips everything
+ * except `.message`.
  */
 const makeRunEffect = (env: Env, request: Request) => {
   const appLayer = makeAppLayer(env, request);
