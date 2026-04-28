@@ -171,6 +171,161 @@ Meaning:
 
 This is why DevTools has a reveal action on slots. The `<slot>` node is inside the component's shadow tree. The slotted child is somewhere else in the light DOM. DevTools lets you jump between those two related but separate locations.
 
+## Why Slots Exist
+
+Slots solve one specific problem: how can a component own its internal markup and styles while still letting the page provide content?
+
+Without slots, a web component has two bad choices:
+
+- Own everything internally, but callers cannot pass content.
+- Use normal children only, but the component's internal layout and styles are exposed and fragile.
+
+Slots are the compromise. They let the component author keep a private implementation while the app author still writes normal child content.
+
+For example, this route authors a button like this:
+
+```tsx
+<s-button href="/app/qrcodes/new" variant="primary">Create QR code</s-button>
+```
+
+The desired app API is simple: a button with text. But Polaris needs to implement it with native HTML, classes, wrappers, focus behavior, and accessibility behavior. The actual shadow DOM is closer to this:
+
+```html
+<a role="link" class="button size-base tone-auto variant-primary" href="/app/qrcodes/new">
+  <span class="content">
+    <span class="text-wrapper">
+      <slot></slot>
+    </span>
+  </span>
+</a>
+```
+
+The `<slot>` means: render whatever children the user put inside `<s-button>` here.
+
+Conceptually:
+
+```text
+Light DOM, owned by this app/React:
+
+<s-button href="/app/qrcodes/new" variant="primary">
+  Create QR code
+</s-button>
+```
+
+```text
+Shadow DOM, owned by Polaris:
+
+<a class="button variant-primary">
+  <slot></slot>
+</a>
+```
+
+```text
+Composed/rendered tree, what the merchant effectively sees:
+
+<a class="button variant-primary">
+  Create QR code
+</a>
+```
+
+The text node is physically still in the light DOM. Visually, the browser projects it into the shadow DOM slot.
+
+## Why Not Move The Child Into Shadow DOM
+
+It would be simpler to imagine Polaris physically moving `Create QR code` into the internal `<a>`, but that would create ownership and synchronization problems:
+
+- React expects to own the children it rendered.
+- The public DOM would stop matching the JSX.
+- Updating/removing children would require copying or moving nodes back and forth.
+- Component internals would become leakier and easier to mutate accidentally.
+- Browser event, accessibility, and focus behavior would be harder to standardize across component libraries.
+
+Slots let the browser compose two trees without relocating nodes.
+
+The app keeps this stable public DOM:
+
+```html
+<s-button>Create QR code</s-button>
+```
+
+Polaris keeps this private implementation DOM:
+
+```html
+<a class="button"><slot></slot></a>
+```
+
+The browser composes them at render time.
+
+## React Analogy
+
+Slots are closest to React `children`.
+
+React component version:
+
+```tsx
+function Button({ children }: { readonly children: React.ReactNode }) {
+  return <a className="button">{children}</a>;
+}
+```
+
+Web component version:
+
+```html
+<a class="button"><slot></slot></a>
+```
+
+Usage:
+
+```html
+<s-button>Create QR code</s-button>
+```
+
+The difference is that React renders one framework-owned output tree. Web Components preserve two DOM trees, light DOM and shadow DOM, and the browser composes them for rendering.
+
+That is why the DevTools representation feels more convoluted than a React component. It exposes the browser-native composition mechanism.
+
+## Why Shadow DOM Exists
+
+Shadow DOM gives component libraries encapsulation.
+
+Polaris can ship `s-button`, `s-grid`, `s-section`, and the rest with:
+
+- Internal native markup.
+- Private CSS classes.
+- Layout wrappers.
+- Focus handling.
+- Accessibility behavior.
+- Variant, tone, and spacing styling.
+- Freedom to change implementation details later.
+
+Without Shadow DOM, app CSS could accidentally break Polaris internals:
+
+```css
+a {
+  color: red;
+}
+
+span {
+  display: block;
+}
+```
+
+Shadow DOM creates a boundary between app DOM/CSS and component DOM/CSS. The public contract is the `s-*` element and its attributes. The internal HTML is an implementation detail.
+
+The tradeoff is the indirection seen in DevTools:
+
+```html
+<s-button>
+  #shadow-root
+    <a>
+      <slot></slot>
+    </a>
+  Create QR code
+</s-button>
+```
+
+That indirection buys encapsulation plus composition.
+
 MDN's `<slot>` docs define this exact behavior:
 
 `https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/slot`:
