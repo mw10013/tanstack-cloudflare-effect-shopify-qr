@@ -26,23 +26,23 @@ const DeleteQrInput = Schema.Struct({
   id: Domain.QrCode.fields.id,
 });
 
-interface QrFormState {
-  readonly id: string | null;
-  readonly handle: string | null;
-  readonly title: string;
-  /** Empty string represents no selected product in new form state. */
-  readonly productId: string;
-  /** Empty string represents no selected variant in new form state. */
-  readonly productVariantId: string;
-  readonly productTitle: string | null;
-  readonly productImage: string | null;
-  readonly productAlt: string | null;
-  readonly destination: Domain.QrCodeDestination;
+type QrFormState = Pick<
+  Domain.QrCode,
+  | "title"
+  | "productTitle"
+  | "productImage"
+  | "productAlt"
+  | "destination"
+> & {
+  readonly id: Domain.QrCode["id"] | null;
+  readonly handle: Domain.QrCode["handle"] | null;
+  readonly productId: typeof QrFormInput.Encoded.productId;
+  readonly productVariantId: typeof QrFormInput.Encoded.productVariantId;
   readonly image: string | null;
   readonly scanUrl: string | null;
   readonly destinationUrl: string | null;
-  readonly shop: string;
-}
+  readonly shop: Domain.Shop;
+};
 
 const loadQrCode = createServerFn({ method: "GET" })
   .middleware([shopifyServerFnMiddleware])
