@@ -439,13 +439,15 @@ That loose prop type allows callers other than Effect/TanStack Form to pass part
 
 Deduping is probably not needed to guard against missing messages in the Effect Schema path. Effect's Standard Schema formatter emits `message: string`.
 
-Deduping can still be useful for display quality. Effect uses `errors: "all"` by default:
+I did not find a current `refs/tces` form schema that obviously emits duplicate message text for a single field. The current form schemas use default Effect messages and no repeated custom validation messages in the `FieldError` call-site paths.
+
+Effect uses `errors: "all"` by default:
 
 ```ts
 const parseOptions: AST.ParseOptions = { errors: "all", ...options?.parseOptions }
 ```
 
-That means one submit can produce multiple issues. Usually they are distinct, for example array element validation plus array length validation:
+That means one submit can produce multiple issues. In normal/default Effect messages, those messages are usually distinct because the message includes the failed check, actual value, or path context. Effect's own test example shows two issues for one `tags` field, but the display text is different:
 
 ```ts
 [
@@ -454,9 +456,95 @@ That means one submit can produce multiple issues. Usually they are distinct, fo
 ]
 ```
 
-But duplicate messages are still possible if several checks fail with the same custom message, or if repeated invalid values produce identical issue messages. `FieldError` dedupes only by message, not by path, because the UI displays messages only and does not show paths.
+Source: `refs/effect4/packages/effect/test/schema/toStandardSchemaV1.test.ts`.
 
-Conclusion: for current `refs/tces` call sites, the robust optional-message handling is defensive. The deduping is not required for type safety, but it remains useful to avoid repeated identical text in field-level UI.
+Duplicate display text is still possible, but mostly in broader/reusable-component scenarios rather than the current observed `refs/tces` forms.
+
+Possible case 1: repeated invalid array items produce identical messages.
+
+For a schema like:
+
+```ts
+const schema = Schema.Struct({
+  emails: Schema.Array(Schema.String.check(Schema.isPattern(emailPattern))),
+})
+```
+
+this value has the same invalid item twice:
+
+```ts
+{ emails: ["nope", "nope"] }
+```
+
+Standard Schema issues could be equivalent to:
+
+```ts
+[
+  { message: `Expected a string matching the pattern, got "nope"`, path: ["emails", 0] },
+  { message: `Expected a string matching the pattern, got "nope"`, path: ["emails", 1] },
+]
+```
+
+Those are different issues because the paths differ, but `FieldError` only displays `message`, not `path`. Without deduping, the UI would show the same bullet twice:
+
+```txt
+- Expected a string matching the pattern, got "nope"
+- Expected a string matching the pattern, got "nope"
+```
+
+With deduping by `message`, it shows once.
+
+Possible case 2: custom validation messages intentionally hide details.
+
+Effect supports custom messages via annotations/check options. The Effect tests show these messages in Standard Schema output:
+
+```ts
+const schema = Schema.String.check(Schema.isNonEmpty({ message: "Custom message" }))
+
+expectSyncFailure(standardSchema, "", [
+  {
+    message: "Custom message",
+    path: []
+  }
+])
+```
+
+Source: `refs/effect4/packages/effect/test/schema/toStandardSchemaV1.test.ts`.
+
+If a field has multiple checks or nested items that all use the same user-friendly message, multiple issues can collapse to identical display text:
+
+```ts
+[
+  { message: "Enter valid email addresses", path: ["emails", 0] },
+  { message: "Enter valid email addresses", path: ["emails", 1] },
+]
+```
+
+Again, these are distinct validation issues, but not distinct displayed messages.
+
+`FieldError` dedupes only by `message`, not by `path`, because the component renders field-level text and does not expose paths. That is a display decision: repeated text is usually noise in this UI.
+
+Conclusion: keep deduping.
+
+For current `refs/tces` call sites, the robust optional-message handling is defensive because Effect Standard Schema emits `message: string`. But deduping is still real display logic, not just defensive code. Standard Schema can represent multiple issues with different paths but identical `message` strings, especially for repeated invalid collection items or generic custom messages.
+
+Example shape:
+
+```ts
+[
+  { message: "Enter valid email addresses", path: ["emails", 0] },
+  { message: "Enter valid email addresses", path: ["emails", 1] },
+]
+```
+
+`FieldError` does not render `path`, only `message`. Without deduping, users would see repeated identical bullet text. With deduping, they see the actionable message once.
+
+So the split is:
+
+| Behavior | Keep? | Why |
+| --- | --- | --- |
+| tolerate `undefined` errors / missing `message` | yes, but defensive | useful for loose reusable prop type, not expected from Effect schema validation |
+| dedupe by `message` | yes | prevents repeated identical display text when multiple issues have different paths but same user-facing message |
 
 ## Behavior Summary
 
