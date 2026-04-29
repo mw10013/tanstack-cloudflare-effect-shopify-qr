@@ -1,7 +1,8 @@
 import * as React from "react";
 import { SaveBar, useAppBridge } from "@shopify/app-bridge-react";
 import { useForm } from "@tanstack/react-form";
-import { useHydrated } from "@tanstack/react-router";
+import { useMutation } from "@tanstack/react-query";
+import { useHydrated, useRouter } from "@tanstack/react-router";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { Effect, Option, Schema } from "effect";
@@ -141,56 +142,58 @@ export const Route = createFileRoute("/app/qrcodes/$id")({
 function QrCodeForm() {
   const loaderData = Route.useLoaderData();
   const { id } = Route.useParams();
+  const router = useRouter();
   const navigate = useNavigate();
   const shopify = useAppBridge();
   const isHydrated = useHydrated();
-  const defaultValues = React.useMemo(() => ({
+  const defaultValues = {
     routeId: id,
     title: loaderData.title,
     productId: loaderData.productId,
     productVariantId: loaderData.productVariantId,
     destination: loaderData.destination,
-  }), [id, loaderData.destination, loaderData.productId, loaderData.productVariantId, loaderData.title]);
-  const [selectedProduct, setSelectedProduct] = React.useState({
+  } satisfies typeof QrFormInput.Type;
+  const loaderProduct = {
     title: loaderData.productTitle,
     image: loaderData.productImage,
     alt: loaderData.productAlt,
+  };
+  const [pickedProduct, setPickedProduct] = React.useState<null | typeof loaderProduct>(null);
+  const saveMutation = useMutation({
+    mutationFn: (data: typeof defaultValues) => saveQrCode({ data }),
+    onSuccess: async (result) => {
+      if (!result.ok) return;
+      if (id === "new") {
+        await shopify.saveBar.hide("qr-code-form");
+        await navigate({ to: "/app" });
+        return;
+      }
+      if (result.handle !== id) {
+        await navigate({ to: "/app/qrcodes/$id", params: { id: result.handle } });
+        return;
+      }
+      await router.invalidate({ sync: true });
+    },
   });
-  const [serverErrors, setServerErrors] = React.useState<Record<string, string>>({});
-  const [isSaving, setIsSaving] = React.useState(false);
-  const [isDeleting, setIsDeleting] = React.useState(false);
+  const deleteMutation = useMutation({
+    mutationFn: (data: typeof DeleteQrInput.Type) => deleteQrCode({ data }),
+    onSuccess: () => navigate({ to: "/app" }),
+  });
 
   const form = useForm({
     defaultValues,
     validators: { onSubmit: Schema.toStandardSchemaV1(QrFormInput) },
     onSubmit: ({ value }) => {
-      setIsSaving(true);
-      setServerErrors({});
-      void saveQrCode({ data: value })
-        .then((result) => {
-          if (!result.ok) {
-            setServerErrors(Object.fromEntries(Object.entries(result.errors).filter((entry): entry is [string, string] => entry[1] !== undefined)));
-            return;
-          }
-          if (id === "new") {
-            void shopify.saveBar.hide("qr-code-form").then(() => navigate({ to: "/app" }));
-          } else void navigate({ to: "/app/qrcodes/$id", params: { id: result.handle } });
-        })
-        .finally(() => {
-          setIsSaving(false);
-        });
+      saveMutation.mutate(value);
     },
   });
   const values = form.state.values;
-  const isDirty = JSON.stringify(values) !== JSON.stringify(defaultValues);
+  const isDirty = values.routeId !== defaultValues.routeId || values.title !== defaultValues.title || values.productId !== defaultValues.productId || values.productVariantId !== defaultValues.productVariantId || values.destination !== defaultValues.destination;
+  const serverErrors = saveMutation.data?.ok === false ? saveMutation.data.errors : {};
+  const productError = serverErrors.productId ?? serverErrors.productVariantId;
+  const selectedProduct = values.productId ? pickedProduct ?? loaderProduct : null;
   const productAdminId = values.productId.split("/").at(-1) ?? "";
   const productUrl = values.productId ? `shopify://admin/products/${productAdminId}` : "";
-
-  React.useEffect(() => {
-    form.reset(defaultValues);
-    setSelectedProduct({ title: loaderData.productTitle, image: loaderData.productImage, alt: loaderData.productAlt });
-    setServerErrors({});
-  }, [defaultValues, form, loaderData.productAlt, loaderData.productImage, loaderData.productTitle]);
 
   const selectProduct = async () => {
     const products = await shopify.resourcePicker({
@@ -205,46 +208,41 @@ function QrCodeForm() {
     if (!variantId) return;
     form.setFieldValue("productId", product.id);
     form.setFieldValue("productVariantId", variantId);
-    setSelectedProduct({
+    setPickedProduct({
       title: product.title,
       image: product.images[0]?.originalSrc ?? null,
       alt: product.images[0]?.altText ?? null,
     });
-    setServerErrors((current) => ({ ...current, productId: "", productVariantId: "" }));
+    saveMutation.reset();
   };
 
   const removeProduct = () => {
     form.setFieldValue("productId", "");
     form.setFieldValue("productVariantId", "");
-    setSelectedProduct({ title: null, image: null, alt: null });
+    setPickedProduct(null);
   };
 
   const deleteCurrent = () => {
     if (!loaderData.id) return;
-    setIsDeleting(true);
-    void deleteQrCode({ data: { id: loaderData.id } })
-      .then(() => navigate({ to: "/app" }))
-      .finally(() => {
-        setIsDeleting(false);
-      });
+    deleteMutation.mutate({ id: loaderData.id });
   };
 
   const reset = () => {
     form.reset(defaultValues);
-    setSelectedProduct({ title: loaderData.productTitle, image: loaderData.productImage, alt: loaderData.productAlt });
-    setServerErrors({});
+    setPickedProduct(null);
+    saveMutation.reset();
   };
 
   return (
     <>
       <SaveBar id="qr-code-form" open={isDirty}>
-        <button variant="primary" onClick={() => void form.handleSubmit()} disabled={isSaving} />
+        <button variant="primary" onClick={() => void form.handleSubmit()} disabled={saveMutation.isPending} />
         <button onClick={reset} />
       </SaveBar>
       <s-page heading={loaderData.handle ? loaderData.title : "Create QR code"}>
         <s-link href="/app" slot="breadcrumb-actions">QR codes</s-link>
         {loaderData.id && isHydrated && (
-          <s-button slot="secondary-actions" onClick={deleteCurrent} {...(isDeleting ? { loading: true } : {})}>Delete</s-button>
+          <s-button slot="secondary-actions" onClick={deleteCurrent} {...(deleteMutation.isPending ? { loading: true } : {})}>Delete</s-button>
         )}
         <s-section heading="QR code information">
           <s-stack gap="base">
@@ -253,7 +251,7 @@ function QrCodeForm() {
                 <s-text-field
                   label="Title"
                   details="Only store staff can see this title"
-                  error={serverErrors.title || fieldError(field.state.meta.errors)}
+                  error={serverErrors.title ?? fieldError(field.state.meta.errors)}
                   autocomplete="off"
                   name={field.name}
                   value={field.state.value}
@@ -271,7 +269,7 @@ function QrCodeForm() {
                     name={field.name}
                     label="Scan destination"
                     value={field.state.value}
-                    error={serverErrors.destination || fieldError(field.state.meta.errors)}
+                    error={serverErrors.destination ?? fieldError(field.state.meta.errors)}
                     onChange={(event) => {
                       field.handleChange(event.currentTarget.value as Domain.QrCodeDestination);
                     }}
@@ -292,19 +290,19 @@ function QrCodeForm() {
               {values.productId ? (
                 <s-stack direction="inline" justifyContent="space-between" alignItems="center">
                   <s-stack direction="inline" gap="small-100" alignItems="center">
-                    <s-clickable href={productUrl} target="_blank" accessibilityLabel={`Go to the product page for ${selectedProduct.title ?? "selected product"}`} borderRadius="base">
+                    <s-clickable href={productUrl} target="_blank" accessibilityLabel={`Go to the product page for ${selectedProduct?.title ?? "selected product"}`} borderRadius="base">
                       <s-box padding="small-200" border="base" borderRadius="base" background="subdued" inlineSize="38px" blockSize="38px">
-                        {selectedProduct.image ? <s-image src={selectedProduct.image} alt={selectedProduct.alt ?? ""} /> : <s-icon size="base" type="product" />}
+                        {selectedProduct?.image ? <s-image src={selectedProduct.image} alt={selectedProduct.alt ?? ""} /> : <s-icon size="base" type="product" />}
                       </s-box>
                     </s-clickable>
-                    <s-link href={productUrl} target="_blank">{selectedProduct.title}</s-link>
+                    <s-link href={productUrl} target="_blank">{selectedProduct?.title}</s-link>
                   </s-stack>
                   {isHydrated && <s-button onClick={() => void selectProduct()}>Change</s-button>}
                 </s-stack>
               ) : (
                 isHydrated && <s-button onClick={() => void selectProduct()}>Select product</s-button>
               )}
-              {(serverErrors.productId || serverErrors.productVariantId) && <s-text tone="critical">{serverErrors.productId || serverErrors.productVariantId}</s-text>}
+              {productError && <s-text tone="critical">{productError}</s-text>}
             </s-stack>
           </s-stack>
         </s-section>
