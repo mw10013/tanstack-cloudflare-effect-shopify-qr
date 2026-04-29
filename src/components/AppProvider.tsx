@@ -1,8 +1,7 @@
 import * as React from "react";
 import { useNavigate } from "@tanstack/react-router";
 
-const APP_BRIDGE_URL = "https://cdn.shopify.com/shopifycloud/app-bridge.js";
-const POLARIS_URL = "https://cdn.shopify.com/shopifycloud/polaris.js";
+import { APP_BRIDGE_URL, POLARIS_URL } from "@/lib/shopifyConstants";
 
 function AppBridge({ apiKey }: { readonly apiKey: string }) {
   const navigate = useNavigate();

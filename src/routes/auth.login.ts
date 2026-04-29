@@ -3,6 +3,7 @@ import { Effect } from "effect";
 
 import { CurrentRequest } from "@/lib/CurrentRequest";
 import { Shopify } from "@/lib/Shopify";
+import { CDN_URL, POLARIS_URL } from "@/lib/shopifyConstants";
 
 /**
  * Shopify OAuth login entry point. Intentionally a pure server-route (no React component).
@@ -20,8 +21,8 @@ const renderLoginPage = (error?: string) => `<!doctype html>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Log in</title>
-    <link rel="preconnect" href="https://cdn.shopify.com/" />
-    <script src="https://cdn.shopify.com/shopifycloud/polaris.js"></script>
+    <link rel="preconnect" href="${CDN_URL}/" />
+    <script src="${POLARIS_URL}"></script>
   </head>
   <body>
     <s-page>

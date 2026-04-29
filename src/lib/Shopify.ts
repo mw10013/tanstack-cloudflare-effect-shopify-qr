@@ -4,6 +4,7 @@ import { Config, Context, Effect, Layer, Option, Redacted, Schema } from "effect
 
 import * as Domain from "@/lib/Domain";
 import { Repository } from "@/lib/Repository";
+import { APP_BRIDGE_URL, CDN_URL, POLARIS_URL } from "@/lib/shopifyConstants";
 
 interface ShopifyConfig {
   readonly apiKey: Redacted.Redacted;
@@ -23,9 +24,6 @@ export type ShopifyAuthenticateAdminResult = ShopifyApi.Session | Response;
 
 export type ShopifyLoginResult = { readonly shop?: string } | Response;
 
-const APP_BRIDGE_URL = "https://cdn.shopify.com/shopifycloud/app-bridge.js";
-const POLARIS_URL = "https://cdn.shopify.com/shopifycloud/polaris.js";
-const CDN_URL = "https://cdn.shopify.com";
 const WITHIN_MILLISECONDS_OF_EXPIRY = 5 * 60 * 1000;
 
 /**
