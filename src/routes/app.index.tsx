@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { Effect } from "effect";
 
@@ -51,6 +51,8 @@ function EmptyQrCodeState() {
 }
 
 function QrCodeTable({ qrCodes }: { readonly qrCodes: Awaited<ReturnType<typeof listQrCodes>> }) {
+  const router = useRouter();
+
   return (
     <s-section padding="none" accessibilityLabel="QR code table">
       <s-table>
@@ -61,12 +63,13 @@ function QrCodeTable({ qrCodes }: { readonly qrCodes: Awaited<ReturnType<typeof 
           <s-table-header>Scans</s-table-header>
         </s-table-header-row>
         <s-table-body>
-          {qrCodes.map((qrCode) => (
-            <s-table-row key={qrCode.handle} id={qrCode.handle}>
+          {qrCodes.map((qrCode) => {
+            const href = router.buildLocation({ to: "/app/qrcodes/$id", params: { id: qrCode.handle } }).publicHref;
+            return <s-table-row key={qrCode.handle} id={qrCode.handle}>
               <s-table-cell>
                 <s-stack direction="inline" gap="small" alignItems="center">
                   <s-clickable
-                    href={`/app/qrcodes/${qrCode.handle}`}
+                    href={href}
                     accessibilityLabel={`Edit QR code for ${qrCode.productTitle ?? qrCode.title}`}
                     border="base"
                     borderRadius="base"
@@ -76,7 +79,7 @@ function QrCodeTable({ qrCodes }: { readonly qrCodes: Awaited<ReturnType<typeof 
                   >
                     {qrCode.productImage ? <s-image objectFit="cover" src={qrCode.productImage} /> : <s-icon size="base" type="image" />}
                   </s-clickable>
-                  <s-link href={`/app/qrcodes/${qrCode.handle}`}>{truncate(qrCode.title)}</s-link>
+                  <s-link href={href}>{truncate(qrCode.title)}</s-link>
                 </s-stack>
               </s-table-cell>
               <s-table-cell>
@@ -84,8 +87,8 @@ function QrCodeTable({ qrCodes }: { readonly qrCodes: Awaited<ReturnType<typeof 
               </s-table-cell>
               <s-table-cell>{new Date(qrCode.createdAt).toDateString()}</s-table-cell>
               <s-table-cell>{qrCode.scans}</s-table-cell>
-            </s-table-row>
-          ))}
+            </s-table-row>;
+          })}
         </s-table-body>
       </s-table>
     </s-section>
