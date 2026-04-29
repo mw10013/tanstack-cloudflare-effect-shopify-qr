@@ -23,7 +23,7 @@ const SaveQrCodeInput = Schema.Struct({
 });
 
 const DeleteQrInput = Schema.Struct({
-  id: Domain.QrCodeId,
+  id: Domain.QrCode.fields.id,
 });
 
 interface QrFormState {
