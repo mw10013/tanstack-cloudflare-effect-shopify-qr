@@ -68,9 +68,9 @@ export const QrCode = Schema.Struct({
 export type QrCode = typeof QrCode.Type;
 
 export const QrCodeUpsert = Schema.Struct({
-  title: Schema.NonEmptyString,
-  productId: ProductId,
-  productVariantId: VariantId,
+  title: Schema.String.check(Schema.isNonEmpty({ message: "Title is required" })),
+  productId: Schema.String.check(Schema.isNonEmpty({ message: "Please select a product" })).pipe(Schema.brand("ProductId")),
+  productVariantId: Schema.String.check(Schema.isNonEmpty({ message: "Please select a product" })).pipe(Schema.brand("VariantId")),
   destination: QrCodeDestination,
 });
 export type QrCodeUpsert = typeof QrCodeUpsert.Type;
