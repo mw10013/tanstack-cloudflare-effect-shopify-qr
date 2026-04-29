@@ -12,13 +12,6 @@ export class QrServiceError extends Schema.TaggedErrorClass<QrServiceError>()(
   },
 ) {}
 
-export interface QrValidationErrors {
-  readonly title?: string;
-  readonly productId?: string;
-  readonly productVariantId?: string;
-  readonly destination?: string;
-}
-
 const appUrlConfig = Config.nonEmptyString("SHOPIFY_APP_URL").pipe(
   Config.orElse(() => Config.nonEmptyString("APP_URL")),
   Config.orElse(() => Config.nonEmptyString("HOST")),
@@ -37,13 +30,6 @@ const decodeHandle = (value: string) =>
   Schema.decodeUnknownEffect(Domain.QrCodeHandle)(value).pipe(
     Effect.mapError((cause) => new QrServiceError({ message: "Invalid QR code handle", cause })),
   );
-
-const validate = (input: Partial<Domain.QrCodeUpsert>): QrValidationErrors => ({
-  ...(input.title ? {} : { title: "Title is required" }),
-  ...(input.productId ? {} : { productId: "Product is required" }),
-  ...(input.productVariantId ? {} : { productVariantId: "Product variant is required" }),
-  ...(input.destination ? {} : { destination: "Destination is required" }),
-});
 
 export class QrService extends Context.Service<QrService>()(
   "QrService",
@@ -94,7 +80,7 @@ export class QrService extends Context.Service<QrService>()(
         return yield* getDestinationUrl(qrCode.value, shop).pipe(Effect.map(Option.some));
       });
 
-      return { validate, generateHandle, getScanUrl, getQrCodeImage, getDestinationUrl, recordScanAndGetDestination };
+      return { generateHandle, getScanUrl, getQrCodeImage, getDestinationUrl, recordScanAndGetDestination };
     }),
   },
 ) {

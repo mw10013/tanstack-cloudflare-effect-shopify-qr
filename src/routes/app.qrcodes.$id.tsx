@@ -17,10 +17,10 @@ import { shopifyServerFnMiddleware } from "@/lib/ShopifyServerFnMiddleware";
 
 const QrFormInput = Schema.Struct({
   routeId: Schema.NonEmptyString,
-  title: Schema.NonEmptyString,
-  productId: Schema.NonEmptyString,
-  productVariantId: Schema.NonEmptyString,
-  destination: Domain.QrCodeDestination,
+  title: Domain.QrCodeUpsert.fields.title,
+  productId: Domain.QrCodeUpsert.fields.productId,
+  productVariantId: Domain.QrCodeUpsert.fields.productVariantId,
+  destination: Domain.QrCodeUpsert.fields.destination,
 });
 
 const DeleteQrInput = Schema.Struct({
@@ -43,7 +43,11 @@ interface QrFormState {
   readonly shop: string;
 }
 
-const fieldError = (errors: unknown[]) => errors.map((error) => error instanceof Error ? error.message : String(error)).join(", ");
+const fieldError = (errors: unknown[]) => errors.map((error) => {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error) return String((error as { message: unknown }).message);
+  return String(error);
+}).join(", ");
 
 const loadQrCode = createServerFn({ method: "GET" })
   .middleware([shopifyServerFnMiddleware])
@@ -112,8 +116,6 @@ const saveQrCode = createServerFn({ method: "POST" })
           productVariantId: data.productVariantId,
           destination: data.destination,
         });
-        const errors = service.validate(input);
-        if (Object.keys(errors).length > 0) return { ok: false, errors } as const;
         const handle = data.routeId === "new" ? yield* service.generateHandle(input.title) : yield* Schema.decodeUnknownEffect(Domain.QrCodeHandle)(data.routeId);
         const saved = yield* repository.save(handle, input);
         return { ok: true, handle: saved.handle } as const;
@@ -152,7 +154,7 @@ function QrCodeForm() {
     productId: loaderData.productId,
     productVariantId: loaderData.productVariantId,
     destination: loaderData.destination,
-  } satisfies typeof QrFormInput.Type;
+  } satisfies typeof QrFormInput.Encoded;
   const loaderProduct = {
     title: loaderData.productTitle,
     image: loaderData.productImage,
@@ -187,20 +189,14 @@ function QrCodeForm() {
       saveMutation.mutate(value);
     },
   });
-  const values = form.state.values;
-  const isDirty = values.routeId !== defaultValues.routeId || values.title !== defaultValues.title || values.productId !== defaultValues.productId || values.productVariantId !== defaultValues.productVariantId || values.destination !== defaultValues.destination;
-  const serverErrors = saveMutation.data?.ok === false ? saveMutation.data.errors : {};
-  const productError = serverErrors.productId ?? serverErrors.productVariantId;
-  const selectedProduct = values.productId ? pickedProduct ?? loaderProduct : null;
-  const productAdminId = values.productId.split("/").at(-1) ?? "";
-  const productUrl = values.productId ? `shopify://admin/products/${productAdminId}` : "";
 
   const selectProduct = async () => {
+    const { productId, productVariantId } = form.state.values;
     const products = await shopify.resourcePicker({
       type: "product",
       action: "select",
       filter: { variants: true },
-      selectionIds: values.productId ? [{ id: values.productId, variants: values.productVariantId ? [{ id: values.productVariantId }] : [] }] : [],
+      selectionIds: productId ? [{ id: productId, variants: productVariantId ? [{ id: productVariantId }] : [] }] : [],
     });
     const product = products?.[0];
     if (!product) return;
@@ -227,7 +223,12 @@ function QrCodeForm() {
     deleteMutation.mutate({ id: loaderData.id });
   };
 
-  const reset = () => {
+  const reset = async () => {
+    if (id === "new") {
+      await shopify.saveBar.hide("qr-code-form");
+      void navigate({ to: "/app" });
+      return;
+    }
     form.reset(defaultValues);
     setPickedProduct(null);
     saveMutation.reset();
@@ -235,10 +236,14 @@ function QrCodeForm() {
 
   return (
     <>
-      <SaveBar id="qr-code-form" open={isDirty}>
-        <button variant="primary" onClick={() => void form.handleSubmit()} disabled={saveMutation.isPending} />
-        <button onClick={reset} />
-      </SaveBar>
+      <form.Subscribe selector={(state) => state.values.title !== defaultValues.title || state.values.productId !== defaultValues.productId || state.values.productVariantId !== defaultValues.productVariantId || state.values.destination !== defaultValues.destination}>
+        {(isDirty) => (
+          <SaveBar id="qr-code-form" open={isDirty}>
+            <button variant="primary" onClick={() => void form.handleSubmit()} disabled={saveMutation.isPending} />
+            <button onClick={() => void reset()} />
+          </SaveBar>
+        )}
+      </form.Subscribe>
       <s-page heading={loaderData.handle ? loaderData.title : "Create QR code"}>
         <s-link href="/app" slot="breadcrumb-actions">QR codes</s-link>
         {loaderData.id && isHydrated && (
@@ -251,7 +256,7 @@ function QrCodeForm() {
                 <s-text-field
                   label="Title"
                   details="Only store staff can see this title"
-                  error={serverErrors.title ?? fieldError(field.state.meta.errors)}
+                  error={fieldError(field.state.meta.errors)}
                   autocomplete="off"
                   name={field.name}
                   value={field.state.value}
@@ -269,7 +274,7 @@ function QrCodeForm() {
                     name={field.name}
                     label="Scan destination"
                     value={field.state.value}
-                    error={serverErrors.destination ?? fieldError(field.state.meta.errors)}
+                    error={fieldError(field.state.meta.errors)}
                     onChange={(event) => {
                       field.handleChange(event.currentTarget.value as Domain.QrCodeDestination);
                     }}
@@ -282,28 +287,43 @@ function QrCodeForm() {
                 </s-stack>
               )}
             </form.Field>
-            <s-stack gap="small-400">
-              <s-stack direction="inline" gap="small-100" justifyContent="space-between">
-                <s-text color="subdued">Product</s-text>
-                {values.productId && <s-link onClick={removeProduct}>Clear</s-link>}
-              </s-stack>
-              {values.productId ? (
-                <s-stack direction="inline" justifyContent="space-between" alignItems="center">
-                  <s-stack direction="inline" gap="small-100" alignItems="center">
-                    <s-clickable href={productUrl} target="_blank" accessibilityLabel={`Go to the product page for ${selectedProduct?.title ?? "selected product"}`} borderRadius="base">
-                      <s-box padding="small-200" border="base" borderRadius="base" background="subdued" inlineSize="38px" blockSize="38px">
-                        {selectedProduct?.image ? <s-image src={selectedProduct.image} alt={selectedProduct.alt ?? ""} /> : <s-icon size="base" type="product" />}
-                      </s-box>
-                    </s-clickable>
-                    <s-link href={productUrl} target="_blank">{selectedProduct?.title}</s-link>
-                  </s-stack>
-                  {isHydrated && <s-button onClick={() => void selectProduct()}>Change</s-button>}
-                </s-stack>
-              ) : (
-                isHydrated && <s-button onClick={() => void selectProduct()}>Select product</s-button>
+            <form.Field name="productId">
+              {(productIdField) => (
+                <form.Field name="productVariantId">
+                  {(productVariantIdField) => {
+                    const productId = productIdField.state.value;
+                    const selectedProduct = productId ? pickedProduct ?? loaderProduct : null;
+                    const productAdminId = productId.split("/").at(-1) ?? "";
+                    const productUrl = productId ? `shopify://admin/products/${productAdminId}` : "";
+                    const productError = fieldError([...productIdField.state.meta.errors, ...productVariantIdField.state.meta.errors]);
+                    return (
+                      <s-stack gap="small-400">
+                        <s-stack direction="inline" gap="small-100" justifyContent="space-between">
+                          <s-text color="subdued">Product</s-text>
+                          {productId && <s-link onClick={removeProduct}>Clear</s-link>}
+                        </s-stack>
+                        {productId ? (
+                          <s-stack direction="inline" justifyContent="space-between" alignItems="center">
+                            <s-stack direction="inline" gap="small-100" alignItems="center">
+                              <s-clickable href={productUrl} target="_blank" accessibilityLabel={`Go to the product page for ${selectedProduct?.title ?? "selected product"}`} borderRadius="base">
+                                <s-box padding="small-200" border="base" borderRadius="base" background="subdued" inlineSize="38px" blockSize="38px">
+                                  {selectedProduct?.image ? <s-image src={selectedProduct.image} alt={selectedProduct.alt ?? ""} /> : <s-icon size="base" type="product" />}
+                                </s-box>
+                              </s-clickable>
+                              <s-link href={productUrl} target="_blank">{selectedProduct?.title}</s-link>
+                            </s-stack>
+                            {isHydrated && <s-button onClick={() => void selectProduct()}>Change</s-button>}
+                          </s-stack>
+                        ) : (
+                          isHydrated && <s-button onClick={() => void selectProduct()}>Select product</s-button>
+                        )}
+                        {productError && <s-text tone="critical">{productError}</s-text>}
+                      </s-stack>
+                    );
+                  }}
+                </form.Field>
               )}
-              {productError && <s-text tone="critical">{productError}</s-text>}
-            </s-stack>
+            </form.Field>
           </s-stack>
         </s-section>
         <s-box slot="aside">

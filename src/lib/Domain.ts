@@ -68,7 +68,7 @@ export const QrCode = Schema.Struct({
 export type QrCode = typeof QrCode.Type;
 
 export const QrCodeUpsert = Schema.Struct({
-  title: Schema.String,
+  title: Schema.NonEmptyString,
   productId: ProductId,
   productVariantId: VariantId,
   destination: QrCodeDestination,
