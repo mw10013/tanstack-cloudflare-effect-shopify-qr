@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { SaveBar, useAppBridge } from "@shopify/app-bridge-react";
-import { useForm } from "@tanstack/react-form";
+import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation } from "@tanstack/react-query";
 import { useHydrated, useRouter } from "@tanstack/react-router";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
@@ -198,7 +198,9 @@ function QrCodeForm() {
 
   const form = useForm({
     defaultValues,
-    validators: { onSubmit: Schema.toStandardSchemaV1(QrFormInput) },
+    /** Keeps first validation submit-driven, then revalidates on change after a submit attempt. */
+    validationLogic: revalidateLogic(),
+    validators: { onDynamic: Schema.toStandardSchemaV1(QrFormInput) },
     onSubmit: ({ value }) => {
       saveMutation.mutate(value);
     },
