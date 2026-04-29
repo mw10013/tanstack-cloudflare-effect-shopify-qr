@@ -556,3 +556,56 @@ So the split is:
 | multiple unique messages | Render bullet list inside alert wrapper |
 | duplicate messages | Render only one instance per message |
 | errors without messages | Ignored in list rendering; can produce no content |
+
+## Project Route Conclusion
+
+For `src/routes/app.qrcodes.$id.tsx`, the looser TCES helper shape is not needed.
+
+The route uses TanStack Form with Effect Standard Schema validators:
+
+```tsx
+validators: { onSubmit: Schema.toStandardSchemaV1(QrFormInput) }
+```
+
+TanStack Form field metadata stores validation errors as an array:
+
+```ts
+errors: Array<...>
+```
+
+Source: `refs/tan-form/packages/form-core/src/FieldApi.ts`.
+
+The default field metadata initializes that array as non-sparse and empty:
+
+```ts
+errors: []
+```
+
+Source: `refs/tan-form/packages/form-core/src/metaHelper.ts`.
+
+Effect's Standard Schema formatter emits issues with required `message: string`:
+
+```ts
+type DefaultIssue = {
+  readonly message: string
+  readonly path: ReadonlyArray<PropertyKey>
+}
+```
+
+Source: `refs/effect4/packages/effect/src/SchemaIssue.ts`.
+
+So `message` can be required in the route helper:
+
+```ts
+readonly { readonly message: string }
+```
+
+However, TanStack Form's inferred field-meta error type still includes `undefined` because field validators are optional in the generic type path. TypeScript reports `field.state.meta.errors` as including `undefined` elements at the route call sites. So the practical helper input type still needs to tolerate `undefined` entries for type compatibility:
+
+```ts
+readonly ({ readonly message: string } | undefined)[]
+```
+
+That is a TypeScript/TanStack generic-shape concern, not evidence that Effect Standard Schema emits missing messages. The helper does not need `message?: string` or optional chaining for `message` after filtering out `undefined` entries.
+
+Keep deduping by `message`. The helper joins messages for Shopify UI component error props and does not render issue paths. Distinct validation issues can still produce identical user-facing messages, especially repeated invalid collection items or generic custom messages, so deduping prevents repeated identical text.
