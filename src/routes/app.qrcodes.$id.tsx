@@ -15,12 +15,11 @@ import { shopifyServerFnMiddleware } from "@/lib/ShopifyServerFnMiddleware";
 
 
 
-const QrFormInput = Schema.Struct({
+const QrFormInput = Domain.QrCodeUpsert;
+
+const SaveQrCodeInput = Schema.Struct({
   routeId: Schema.NonEmptyString,
-  title: Domain.QrCodeUpsert.fields.title,
-  productId: Domain.QrCodeUpsert.fields.productId,
-  productVariantId: Domain.QrCodeUpsert.fields.productVariantId,
-  destination: Domain.QrCodeUpsert.fields.destination,
+  ...QrFormInput.fields,
 });
 
 const DeleteQrInput = Schema.Struct({
@@ -104,18 +103,18 @@ const loadQrCode = createServerFn({ method: "GET" })
 
 const saveQrCode = createServerFn({ method: "POST" })
   .middleware([shopifyServerFnMiddleware])
-  .inputValidator(Schema.toStandardSchemaV1(QrFormInput))
+  .inputValidator(Schema.toStandardSchemaV1(SaveQrCodeInput))
   .handler(({ data, context: { runEffect } }) =>
     runEffect(
       Effect.gen(function* () {
         const repository = yield* QrRepository;
         const service = yield* QrService;
-        const input = yield* Schema.decodeUnknownEffect(Domain.QrCodeUpsert)({
+        const input = {
           title: data.title,
           productId: data.productId,
           productVariantId: data.productVariantId,
           destination: data.destination,
-        });
+        } satisfies Domain.QrCodeUpsert;
         const handle = data.routeId === "new" ? yield* service.generateHandle(input.title) : yield* Schema.decodeUnknownEffect(Domain.QrCodeHandle)(data.routeId);
         const saved = yield* repository.save(handle, input);
         return { ok: true, handle: saved.handle } as const;
@@ -149,7 +148,6 @@ function QrCodeForm() {
   const shopify = useAppBridge();
   const isHydrated = useHydrated();
   const defaultValues = {
-    routeId: id,
     title: loaderData.title,
     productId: loaderData.productId,
     productVariantId: loaderData.productVariantId,
@@ -162,7 +160,7 @@ function QrCodeForm() {
   };
   const [pickedProduct, setPickedProduct] = React.useState<null | typeof loaderProduct>(null);
   const saveMutation = useMutation({
-    mutationFn: (data: typeof defaultValues) => saveQrCode({ data }),
+    mutationFn: (data: typeof defaultValues) => saveQrCode({ data: { routeId: id, ...data } }),
     onSuccess: async (result) => {
       if (!result.ok) return;
       if (id === "new") {

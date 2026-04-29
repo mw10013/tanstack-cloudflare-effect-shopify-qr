@@ -2,52 +2,126 @@
 
 ## Question
 
-`src/routes/app.qrcodes.$id.tsx` currently decodes the submitted QR payload, then runs a second ad hoc validator:
+At `src/routes/app.qrcodes.$id.tsx:105`, are we validating submit data twice?
+
+Current server fn:
 
 ```ts
-const input = yield* Schema.decodeUnknownEffect(Domain.QrCodeUpsert)({
-  title: data.title,
-  productId: data.productId,
-  productVariantId: data.productVariantId,
-  destination: data.destination,
-});
-const errors = service.validate(input);
-if (Object.keys(errors).length > 0) return { ok: false, errors } as const;
+const saveQrCode = createServerFn({ method: "POST" })
+  .middleware([shopifyServerFnMiddleware])
+  .inputValidator(Schema.toStandardSchemaV1(QrFormInput))
+  .handler(({ data, context: { runEffect } }) =>
+    runEffect(
+      Effect.gen(function* () {
+        const repository = yield* QrRepository;
+        const service = yield* QrService;
+        const input = yield* Schema.decodeUnknownEffect(Domain.QrCodeUpsert)({
+          title: data.title,
+          productId: data.productId,
+          productVariantId: data.productVariantId,
+          destination: data.destination,
+        });
 ```
 
-This is suspicious because `QrFormInput` already rejects empty form fields before handler execution:
+`QrFormInput` is effectively `routeId + QrCodeUpsert`:
 
 ```ts
 const QrFormInput = Schema.Struct({
   routeId: Schema.NonEmptyString,
-  title: Schema.NonEmptyString,
-  productId: Schema.NonEmptyString,
-  productVariantId: Schema.NonEmptyString,
-  destination: Domain.QrCodeDestination,
+  title: Domain.QrCodeUpsert.fields.title,
+  productId: Domain.QrCodeUpsert.fields.productId,
+  productVariantId: Domain.QrCodeUpsert.fields.productVariantId,
+  destination: Domain.QrCodeUpsert.fields.destination,
 });
-
-const saveQrCode = createServerFn({ method: "POST" })
-  .middleware([shopifyServerFnMiddleware])
-  .inputValidator(Schema.toStandardSchemaV1(QrFormInput))
 ```
 
-Then the form also uses that same schema on submit:
+Domain schema:
 
 ```ts
-const form = useForm({
-  defaultValues,
-  validators: { onSubmit: Schema.toStandardSchemaV1(QrFormInput) },
-  onSubmit: ({ value }) => {
-    saveMutation.mutate(value);
-  },
+export const QrCodeUpsert = Schema.Struct({
+  title: Schema.NonEmptyString,
+  productId: ProductId,
+  productVariantId: VariantId,
+  destination: QrCodeDestination,
 });
 ```
 
-## `refs/tces` Pattern
+Source: `src/lib/Domain.ts:70`.
 
-`refs/tces` generally makes the Effect schema the form contract and reuses it in two places.
+## TanStack Start Behavior
 
-Client-side submit validation:
+TanStack Start executes `inputValidator` on the server before the server fn handler runs.
+
+Source: `refs/tan-start/packages/start-client-core/src/createServerFn.ts:231`:
+
+```ts
+if (
+  'inputValidator' in nextMiddleware.options &&
+  nextMiddleware.options.inputValidator &&
+  env === 'server'
+) {
+  ctx.data = await execValidator(
+    nextMiddleware.options.inputValidator,
+    ctx.data,
+  )
+}
+```
+
+For Standard Schema validators, Start returns the parsed value as handler data.
+
+Source: `refs/tan-start/packages/start-client-core/src/createServerFn.ts:749`:
+
+```ts
+export async function execValidator(
+  validator: AnyValidator,
+  input: unknown,
+): Promise<unknown> {
+  if (validator == null) return {}
+
+  if ('~standard' in validator) {
+    const result = await validator['~standard'].validate(input)
+
+    if (result.issues)
+      throw new Error(JSON.stringify(result.issues, undefined, 2))
+
+    return result.value
+  }
+```
+
+The local TanStack Start skill docs show the same contract.
+
+Source: `refs/tan-start/packages/start-client-core/skills/start-core/server-functions/SKILL.md:94`:
+
+```ts
+const greetUser = createServerFn({ method: 'GET' })
+  .inputValidator((data: { name: string }) => data)
+  .handler(async ({ data }) => {
+    return `Hello, ${data.name}!`
+  })
+```
+
+Conclusion: yes, handler `data` is already parsed and validated by `Schema.toStandardSchemaV1(QrFormInput)`. Re-decoding the overlapping fields with `Domain.QrCodeUpsert` is duplicate validation, not a safety requirement.
+
+## TCES Pattern
+
+`refs/tces` generally has one schema per boundary contract and reuses it directly in `inputValidator`, route search validation, or TanStack Form.
+
+Example server fn input only, no second decode in handler:
+
+Source: `refs/tces/src/routes/app.$organizationId.invitations.tsx:160`:
+
+```ts
+export const invite = createServerFn({ method: "POST" })
+  .inputValidator(Schema.toStandardSchemaV1(inviteSchema))
+  .handler(
+    ({ data: { organizationId, emails, role }, context: { runEffect } }) =>
+      runEffect(
+        Effect.gen(function* () {
+```
+
+Same schema reused by the form:
+
+Source: `refs/tces/src/routes/app.$organizationId.invitations.tsx:219`:
 
 ```ts
 const form = useForm({
@@ -61,190 +135,79 @@ const form = useForm({
 });
 ```
 
-Server fn input validation:
+When the form shape differs from the domain/update input, TCES derives a form schema from the domain schema rather than manually repeating constraints.
+
+Source: `refs/tces/src/routes/app.$organizationId.invoices.$invoiceId.tsx:37`:
 
 ```ts
-export const invite = createServerFn({ method: "POST" })
-  .inputValidator(Schema.toStandardSchemaV1(inviteSchema))
-  .handler(
-    ({ data: { organizationId, emails, role }, context: { runEffect } }) =>
-      runEffect(
-        Effect.gen(function* () {
-```
-
-Source: `refs/tces/src/routes/app.$organizationId.invitations.tsx`.
-
-The schema carries real validation and transformations, not a second service-level validator:
-
-```ts
-const inviteSchema = Schema.Struct({
-  organizationId: Domain.Organization.fields.id,
-  emails: Schema.String.pipe(
-    Schema.decodeTo(
-      Schema.Array(Schema.String.check(Schema.isPattern(emailPattern)))
-        .check(Schema.isMinLength(1))
-        .check(Schema.isMaxLength(10)),
-      SchemaTransformation.transform({
-        decode: (value): readonly string[] => splitEmails(value),
-        encode: (emails: readonly string[]) => emails.join(", "),
-      }),
-    ),
-  ),
-  role: Schema.Literals(Domain.AssignableMemberRoleValues),
+const UpdateInvoiceFields = UpdateInvoiceInput.mapFields(Struct.omit(["invoiceId"]));
+const InvoiceFormSchema = Schema.Struct({
+  ...UpdateInvoiceFields.fields,
+  invoiceItems: Schema.mutable(UpdateInvoiceFields.fields.invoiceItems),
 });
+const invoiceFormStandardSchema = Schema.toStandardSchemaV1(InvoiceFormSchema);
 ```
 
-Other `tces` examples match the same shape:
-
-```ts
-const banUserSchema = Schema.Struct({
-  userId: Domain.User.fields.id,
-  banReason: Schema.String.check(Schema.isMaxLength(100)),
-});
-
-export const banUser = createServerFn({ method: "POST" })
-  .inputValidator(Schema.toStandardSchemaV1(banUserSchema))
-```
+The form then submits values already validated against `InvoiceFormSchema`:
 
 ```ts
 const form = useForm({
   defaultValues,
   validators: {
-    onSubmit: Schema.toStandardSchemaV1(banUserSchema),
+    onSubmit: invoiceFormStandardSchema,
   },
   onSubmit: ({ value }) => {
-    if (userId) banUserMutation.mutate(value);
+    void saveMutation.mutateAsync(value);
   },
 });
 ```
 
-Source: `refs/tces/src/routes/admin.users.tsx`.
+Source: `refs/tces/src/routes/app.$organizationId.invoices.$invoiceId.tsx:92`.
 
-## Error Display Pattern
+TCES does still validate at each trust boundary. Example: form validation and server fn validation may use the same schema because client validation is UX and server fn validation is security. But it does not usually validate again inside the handler with the same schema after `inputValidator` has parsed the data.
 
-Form validation errors are field metadata, not a custom `{ ok: false, errors }` payload:
+## Assessment For This Route
 
-```tsx
-<form.Field name="email">
-  {(field) => {
-    const isInvalid = field.state.meta.errors.length > 0;
-    return (
-      <Field data-invalid={isInvalid}>
-        <FieldLabel htmlFor={field.name}>Email</FieldLabel>
-        <Input
-          id={field.name}
-          name={field.name}
-          type="email"
-          value={field.state.value}
-          onBlur={field.handleBlur}
-          onChange={(e) => {
-            field.handleChange(e.target.value);
-          }}
-          aria-invalid={isInvalid}
-          disabled={!isHydrated}
-        />
-        {isInvalid && (
-          <FieldError errors={field.state.meta.errors} />
-        )}
-      </Field>
-    );
-  }}
-</form.Field>
-```
+There are two legitimate validation boundaries:
 
-Source: `refs/tces/src/routes/login.tsx`.
+1. Client form `validators.onSubmit`: UX, immediate field errors, not trusted.
+2. Server fn `.inputValidator(...)`: trusted boundary, rejects/parses data before handler.
 
-`FieldError` accepts Standard Schema/TanStack Form style errors with optional `message`, deduplicates them, and renders one message or a list:
+The awkward part is the third validation:
 
 ```ts
-function FieldError({
-  className,
-  children,
-  errors,
-  ...props
-}: React.ComponentProps<"div"> & {
-  errors?: Array<{ message?: string } | undefined>
-}) {
-  const content = useMemo(() => {
-    if (children) {
-      return children
-    }
-
-    if (!errors?.length) {
-      return null
-    }
-
-    const uniqueErrors = [
-      ...new Map(errors.map((error) => [error?.message, error])).values(),
-    ]
-```
-
-Source: `refs/tces/src/components/ui/field.tsx`.
-
-Mutation/server failures are global/exceptions, not field validation maps:
-
-```tsx
-{inviteMutation.error && (
-  <Alert variant="destructive">
-    <AlertCircle className="size-4" />
-    <AlertTitle>Error</AlertTitle>
-    <AlertDescription>
-      {inviteMutation.error.message}
-    </AlertDescription>
-  </Alert>
-)}
-```
-
-Source: `refs/tces/src/routes/app.$organizationId.invitations.tsx`.
-
-## Implication For QR Route
-
-`QrService.validate` duplicates a weaker version of the schema:
-
-```ts
-const validate = (input: Partial<Domain.QrCodeUpsert>): QrValidationErrors => ({
-  ...(input.title ? {} : { title: "Title is required" }),
-  ...(input.productId ? {} : { productId: "Product is required" }),
-  ...(input.productVariantId ? {} : { productVariantId: "Product variant is required" }),
-  ...(input.destination ? {} : { destination: "Destination is required" }),
+const input = yield* Schema.decodeUnknownEffect(Domain.QrCodeUpsert)({
+  title: data.title,
+  productId: data.productId,
+  productVariantId: data.productVariantId,
+  destination: data.destination,
 });
 ```
 
-Source: `src/lib/QrService.ts`.
-
-Given the current route, `service.validate(input)` should be unreachable for the listed missing-field cases because:
-
-1. `saveQrCode.inputValidator(Schema.toStandardSchemaV1(QrFormInput))` rejects invalid submitted data before the handler.
-2. `Domain.QrCodeUpsert` decode brands `productId` and `productVariantId` as non-empty strings.
-3. The client form uses the same `QrFormInput` as `validators.onSubmit`.
-
-The `Object.keys(errors).length > 0` check is a symptom of the ad hoc map shape. `tces` avoids that by encoding validation constraints in schemas and letting TanStack Form own field-level error state.
+Because `QrFormInput` already uses the exact `Domain.QrCodeUpsert.fields.*` schemas for those four fields, this is redundant. The handler can build the repository input from already validated `data` without decoding again.
 
 ## Recommendation
 
-Prefer removing `QrService.validate`, `QrValidationErrors`, `serverErrors`, `productError`, and the `{ ok: false, errors }` save result branch.
-
-Move any still-needed business validation into schemas, for example:
-
-```ts
-export const QrCodeUpsert = Schema.Struct({
-  title: Schema.NonEmptyString,
-  productId: ProductId,
-  productVariantId: VariantId,
-  destination: QrCodeDestination,
-});
-```
-
-Then make `QrFormInput` reuse domain fields instead of defining parallel constraints:
+Keep one boundary schema for the server fn:
 
 ```ts
 const QrFormInput = Schema.Struct({
   routeId: Schema.NonEmptyString,
-  title: Domain.QrCodeUpsert.fields.title,
-  productId: Domain.QrCodeUpsert.fields.productId,
-  productVariantId: Domain.QrCodeUpsert.fields.productVariantId,
-  destination: Domain.QrCodeUpsert.fields.destination,
+  ...Domain.QrCodeUpsert.fields,
 });
 ```
 
-Keep mutation errors for real server failures, like missing Shopify product data, authorization, repository failures, or GraphQL failures. Field-level required/type validation should stay in Standard Schema/TanStack Form.
+Then in the handler, avoid re-decoding the same fields:
+
+```ts
+const input = {
+  title: data.title,
+  productId: data.productId,
+  productVariantId: data.productVariantId,
+  destination: data.destination,
+} satisfies Domain.QrCodeUpsert;
+```
+
+Keep decoding `data.routeId` as `Domain.QrCodeHandle` for the existing-record path because `routeId` has a different contract from QR upsert data: it may be the sentinel `"new"` before save, and otherwise must be a persisted QR handle.
+
+Net: client validation plus server `inputValidator` is correct. Server `inputValidator` plus handler-level `Domain.QrCodeUpsert` decode is redundant in the current code.
