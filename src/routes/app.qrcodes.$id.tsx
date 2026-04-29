@@ -12,25 +12,7 @@ import { QrService } from "@/lib/QrService";
 import { CurrentSession } from "@/lib/CurrentSession";
 import { shopifyServerFnMiddleware } from "@/lib/ShopifyServerFnMiddleware";
 
-interface ShopifyPickerProduct {
-  readonly id: string;
-  readonly title: string;
-  readonly images: readonly { readonly altText?: string | null; readonly originalSrc?: string | null }[];
-  readonly variants: readonly { readonly id: string }[];
-}
 
-declare global {
-  interface Window {
-    readonly shopify?: {
-      readonly resourcePicker?: (options: {
-        readonly type: "product";
-        readonly action: "select";
-        readonly filter: { readonly variants: true };
-        readonly selectionIds: readonly { readonly id: string; readonly variants: readonly { readonly id: string }[] }[];
-      }) => Promise<readonly ShopifyPickerProduct[] | undefined>;
-    };
-  }
-}
 
 const QrFormInput = Schema.Struct({
   routeId: Schema.NonEmptyString,
@@ -210,23 +192,25 @@ function QrCodeForm() {
     setServerErrors({});
   }, [defaultValues, form, loaderData.productAlt, loaderData.productImage, loaderData.productTitle]);
 
-  const selectProduct = () => {
-    const picker = window.shopify?.resourcePicker;
-    if (!picker) return;
-    void picker({
+  const selectProduct = async () => {
+    const products = await shopify.resourcePicker({
       type: "product",
       action: "select",
       filter: { variants: true },
       selectionIds: values.productId ? [{ id: values.productId, variants: values.productVariantId ? [{ id: values.productVariantId }] : [] }] : [],
-    }).then((products) => {
-      const product = products?.[0];
-      const variantId = product?.variants[0]?.id;
-      if (!product || !variantId) return;
-      form.setFieldValue("productId", product.id);
-      form.setFieldValue("productVariantId", variantId);
-      setSelectedProduct({ title: product.title, image: product.images[0]?.originalSrc ?? null, alt: product.images[0]?.altText ?? null });
-      setServerErrors((current) => ({ ...current, productId: "", productVariantId: "" }));
     });
+    const product = products?.[0];
+    if (!product) return;
+    const variantId = product.variants[0]?.id;
+    if (!variantId) return;
+    form.setFieldValue("productId", product.id);
+    form.setFieldValue("productVariantId", variantId);
+    setSelectedProduct({
+      title: product.title,
+      image: product.images[0]?.originalSrc ?? null,
+      alt: product.images[0]?.altText ?? null,
+    });
+    setServerErrors((current) => ({ ...current, productId: "", productVariantId: "" }));
   };
 
   const removeProduct = () => {
@@ -315,10 +299,10 @@ function QrCodeForm() {
                     </s-clickable>
                     <s-link href={productUrl} target="_blank">{selectedProduct.title}</s-link>
                   </s-stack>
-                  {isHydrated && <s-button onClick={selectProduct}>Change</s-button>}
+                  {isHydrated && <s-button onClick={() => void selectProduct()}>Change</s-button>}
                 </s-stack>
               ) : (
-                isHydrated && <s-button onClick={selectProduct}>Select product</s-button>
+                isHydrated && <s-button onClick={() => void selectProduct()}>Select product</s-button>
               )}
               {(serverErrors.productId || serverErrors.productVariantId) && <s-text tone="critical">{serverErrors.productId || serverErrors.productVariantId}</s-text>}
             </s-stack>

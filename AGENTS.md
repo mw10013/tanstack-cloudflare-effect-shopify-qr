@@ -8,7 +8,7 @@
 
 ## Project
 
-- `tanstack-cloudflare-effect-shopify-qr` is a port of refs/shopify-app-qr for TanStack Start, Cloudflare and effect v4.
+- `tanstack-cloudflare-effect-shopify-qr` is a port of refs/shopify-app-qr for TanStack Start, Cloudflare and effect v4. However, the reference project is kind of shitty so prefer refs/shopify-app-js and refs/shopify-bridge for production patterns.
 - Route modules are in `src/routes/` and use file route conventions.
 
 ## Port Configuration
