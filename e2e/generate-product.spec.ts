@@ -10,6 +10,10 @@ test("generate product from iframe button renders product JSON", async ({
   const frame = page.frameLocator('iframe[src*="embedded=1"]');
   await expect(frame.locator("s-page")).toBeVisible();
 
+  const templateDemoLink = page.getByRole("link", { name: "Template demo" });
+  await expect(templateDemoLink).toBeVisible();
+  await templateDemoLink.evaluate((el) => (el as HTMLAnchorElement).click());
+
   const productSection = frame.locator(
     's-section[heading="Get started with products"]',
   );
