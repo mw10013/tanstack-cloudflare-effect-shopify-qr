@@ -30,7 +30,9 @@ interface QrFormState {
   readonly id: string | null;
   readonly handle: string | null;
   readonly title: string;
+  /** Empty string represents no selected product in new form state. */
   readonly productId: string;
+  /** Empty string represents no selected variant in new form state. */
   readonly productVariantId: string;
   readonly productTitle: string | null;
   readonly productImage: string | null;
