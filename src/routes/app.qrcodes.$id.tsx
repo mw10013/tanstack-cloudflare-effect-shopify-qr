@@ -43,11 +43,11 @@ interface QrFormState {
   readonly shop: string;
 }
 
-const fieldError = (errors: unknown[]) => errors.map((error) => {
-  if (error instanceof Error) return error.message;
-  if (error && typeof error === "object" && "message" in error) return String((error as { message: unknown }).message);
-  return String(error);
-}).join(", ");
+const fieldError = (errors: ({ message?: string } | undefined)[]) =>
+  [...new Map(errors.filter(Boolean).map((e) => [e?.message, e])).values()]
+    .map((e) => e?.message)
+    .filter(Boolean)
+    .join(", ");
 
 const loadQrCode = createServerFn({ method: "GET" })
   .middleware([shopifyServerFnMiddleware])
