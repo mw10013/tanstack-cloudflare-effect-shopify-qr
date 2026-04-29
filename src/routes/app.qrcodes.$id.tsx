@@ -13,6 +13,7 @@ import * as Domain from "@/lib/Domain";
 import { QrRepository } from "@/lib/QrRepository";
 import { QrService } from "@/lib/QrService";
 import { shopifyServerFnMiddleware } from "@/lib/ShopifyServerFnMiddleware";
+import { fieldError } from "@/lib/form";
 
 const QrFormInput = Domain.QrCodeUpsert;
 
@@ -40,22 +41,6 @@ interface QrFormState {
   readonly destinationUrl: string | null;
   readonly shop: string;
 }
-
-/**
- * Formats Standard Schema field issues for Shopify UI error props.
- * TanStack Form's inferred meta error type includes undefined entries even when Effect emits required messages.
- * Dedupes by message because paths are not rendered here.
- */
-const fieldError = (
-  errors: readonly ({ readonly message: string } | undefined)[],
-) =>
-  [
-    ...new Map(
-      errors.filter((error) => !!error).map((error) => [error.message, error]),
-    ).values(),
-  ]
-    .map((error) => error.message)
-    .join(", ");
 
 const loadQrCode = createServerFn({ method: "GET" })
   .middleware([shopifyServerFnMiddleware])
