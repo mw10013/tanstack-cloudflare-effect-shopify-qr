@@ -169,10 +169,17 @@ function QrCodeForm() {
   const [pickedProduct, setPickedProduct] = React.useState<
     null | typeof loaderProduct
   >(null);
+  /**
+   * Re-bases TanStack Form to the just-saved values on same-handle saves so
+   * `state.isDefaultValue` reflects the persisted baseline immediately.
+   */
   const saveMutation = useMutation({
     mutationFn: (data: typeof defaultValues) =>
       saveQrCode({ data: { handle, ...data } }),
-    onSuccess: async (result) => {
+    onSuccess: async (result, variables) => {
+      if (result.handle === handle) {
+        form.reset(variables);
+      }
       await shopify.saveBar.hide(qrCodeSaveBarId);
       if (result.handle !== handle) {
         await navigate({
@@ -198,14 +205,11 @@ function QrCodeForm() {
       saveMutation.mutate(value);
     },
   });
-  const isDirty = useStore(
-    form.store,
-    (state) =>
-      state.values.title !== defaultValues.title ||
-      state.values.productId !== defaultValues.productId ||
-      state.values.productVariantId !== defaultValues.productVariantId ||
-      state.values.destination !== defaultValues.destination,
-  );
+  /**
+   * `isDirty` is persistent in TanStack Form, but the Shopify save bar should
+   * hide again after values return to the current saved defaults.
+   */
+  const isDirty = useStore(form.store, (state) => !state.isDefaultValue);
 
   /** Syncs TanStack Form dirty state to Shopify's programmatic Save Bar API. */
   React.useEffect(() => {
