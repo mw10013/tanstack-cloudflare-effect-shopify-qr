@@ -126,8 +126,9 @@ const saveQrCode = createServerFn({ method: "POST" })
             : yield* Schema.decodeUnknownEffect(Domain.QrCodeHandle)(
                 data.routeId,
               );
-        const saved = yield* repository.save(handle, input);
-        return { ok: true, handle: saved.handle } as const;
+        return yield* repository.save(handle, input).pipe(
+          Effect.map(({ handle }) => ({ handle })),
+        );
       }),
     ),
   );
@@ -139,8 +140,7 @@ const deleteQrCode = createServerFn({ method: "POST" })
     runEffect(
       Effect.gen(function* () {
         const repository = yield* QrRepository;
-        yield* repository.deleteById(id);
-        return { ok: true } as const;
+        return yield* repository.deleteById(id);
       }),
     ),
   );
@@ -175,7 +175,6 @@ function QrCodeForm() {
     mutationFn: (data: typeof defaultValues) =>
       saveQrCode({ data: { routeId: id, ...data } }),
     onSuccess: async (result) => {
-      if (!result.ok) return;
       if (id === "new") {
         await shopify.saveBar.hide("qr-code-form");
         await navigate({ to: "/app" });
