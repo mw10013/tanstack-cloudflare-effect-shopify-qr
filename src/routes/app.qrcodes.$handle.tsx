@@ -2,7 +2,7 @@ import "@/lib/shopifyAppBridgeElements";
 import * as React from "react";
 
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { revalidateLogic, useForm } from "@tanstack/react-form";
+import { revalidateLogic, useForm, useStore } from "@tanstack/react-form";
 import { useMutation } from "@tanstack/react-query";
 import { useHydrated, useRouter } from "@tanstack/react-router";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
@@ -173,7 +173,7 @@ function QrCodeForm() {
     mutationFn: (data: typeof defaultValues) =>
       saveQrCode({ data: { handle, ...data } }),
     onSuccess: async (result) => {
-      await shopify.saveBar.hide("qr-code-form");
+      await shopify.saveBar.hide(qrCodeSaveBarId);
       if (result.handle !== handle) {
         await navigate({
           to: "/app/qrcodes/$handle",
@@ -198,6 +198,25 @@ function QrCodeForm() {
       saveMutation.mutate(value);
     },
   });
+  const isDirty = useStore(
+    form.store,
+    (state) =>
+      state.values.title !== defaultValues.title ||
+      state.values.productId !== defaultValues.productId ||
+      state.values.productVariantId !== defaultValues.productVariantId ||
+      state.values.destination !== defaultValues.destination,
+  );
+
+  React.useEffect(() => {
+    void shopify.saveBar[isDirty ? "show" : "hide"](qrCodeSaveBarId);
+  }, [isDirty, shopify]);
+
+  React.useEffect(
+    () => () => {
+      void shopify.saveBar.hide(qrCodeSaveBarId);
+    },
+    [shopify],
+  );
 
   const selectProduct = async () => {
     const { productId, productVariantId } = form.state.values;
@@ -241,7 +260,7 @@ function QrCodeForm() {
 
   const reset = async () => {
     if (handle === "new") {
-      await shopify.saveBar.hide("qr-code-form");
+      await shopify.saveBar.hide(qrCodeSaveBarId);
       void navigate({ to: "/app" });
       return;
     }
@@ -262,18 +281,6 @@ function QrCodeForm() {
 
   return (
     <>
-      <form.Subscribe
-        selector={(state) =>
-          state.values.title !== defaultValues.title ||
-          state.values.productId !== defaultValues.productId ||
-          state.values.productVariantId !== defaultValues.productVariantId ||
-          state.values.destination !== defaultValues.destination
-        }
-      >
-        {(isDirty) => (
-          <QrCodeSaveBarVisibility isDirty={isDirty} shopify={shopify} />
-        )}
-      </form.Subscribe>
       <ui-save-bar id={qrCodeSaveBarId}>
         <button
           variant="primary"
@@ -494,25 +501,4 @@ function QrCodeForm() {
       </s-page>
     </>
   );
-}
-
-function QrCodeSaveBarVisibility({
-  isDirty,
-  shopify,
-}: {
-  readonly isDirty: boolean;
-  readonly shopify: ReturnType<typeof useAppBridge>;
-}) {
-  React.useEffect(() => {
-    void shopify.saveBar[isDirty ? "show" : "hide"](qrCodeSaveBarId);
-  }, [isDirty, shopify]);
-
-  React.useEffect(
-    () => () => {
-      void shopify.saveBar.hide(qrCodeSaveBarId);
-    },
-    [shopify],
-  );
-
-  return null;
 }
