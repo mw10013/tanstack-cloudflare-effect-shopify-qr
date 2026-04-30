@@ -45,8 +45,8 @@ importers:
         specifier: 1.167.8
         version: 1.167.8(@tanstack/react-router@1.168.7(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(vite@7.3.0(@types/node@25.0.3)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.3))
       effect:
-        specifier: 4.0.0-beta.57
-        version: 4.0.0-beta.57
+        specifier: 4.0.0-beta.59
+        version: 4.0.0-beta.59
       qrcode:
         specifier: 1.5.4
         version: 1.5.4
@@ -76,8 +76,8 @@ importers:
         specifier: 0.14.3
         version: 0.14.3(@vitest/runner@4.1.4)(@vitest/snapshot@4.1.4)(vitest@4.1.4)
       '@effect/vitest':
-        specifier: 4.0.0-beta.57
-        version: 4.0.0-beta.57(effect@4.0.0-beta.57)(vitest@4.1.4)
+        specifier: 4.0.0-beta.59
+        version: 4.0.0-beta.59(effect@4.0.0-beta.59)(vitest@4.1.4)
       '@graphql-codegen/cli':
         specifier: 6.3.1
         version: 6.3.1(@parcel/watcher@2.5.6)(@types/node@25.0.3)(graphql@16.13.2)(typescript@5.9.3)
@@ -376,10 +376,10 @@ packages:
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
     engines: {node: '>=12'}
 
-  '@effect/vitest@4.0.0-beta.57':
-    resolution: {integrity: sha512-XyGYv1zisrdP/N8+r4qaegyHZK4WS/1xBGlLPWqEoggBhgW7rD48cGUXDLEP7TlHcIJQiIlHtJlQUIwgVx3zWg==}
+  '@effect/vitest@4.0.0-beta.59':
+    resolution: {integrity: sha512-jhpJbpDs1ED58SmFzcfmqLXxle84fiexaMEhV8SBl8WC2GM3FT5DW0WJYFjbZIH5/735brp3iGdjY5/uAxS7Bg==}
     peerDependencies:
-      effect: ^4.0.0-beta.57
+      effect: ^4.0.0-beta.59
       vitest: ^3.0.0 || ^4.0.0
 
   '@emnapi/runtime@1.9.1':
@@ -2763,8 +2763,8 @@ packages:
   dot-case@3.0.4:
     resolution: {integrity: sha512-Kv5nKlh6yRrdrGvxeJ2e5y2eRUpkUosIW4A2AS38zwSz27zu7ufDwQPi5Jhs3XAlGNetl3bmnGhQsMtkKJnj3w==}
 
-  effect@4.0.0-beta.57:
-    resolution: {integrity: sha512-rg32VgXnLKaPRs9tbRDaZ5jxmzNY7ojXt85gSHGUTwdlbWH5Ik+OCUY2q14TXliygPGoHwCAvNWS4bQJOqf00g==}
+  effect@4.0.0-beta.59:
+    resolution: {integrity: sha512-xyUDLeHSe8d6lWGOvR6Fgn2HL6gYeTZ/S4Jzk9uc4ZUxMPPsNZlNXrvk0C7/utQFzeX7uAWcVnG2BjbA0SRoAA==}
 
   electron-to-chromium@1.5.331:
     resolution: {integrity: sha512-IbxXrsTlD3hRodkLnbxAPP4OuJYdWCeM3IOdT+CpcMoIwIoDfCmRpEtSPfwBXxVkg9xmBeY7Lz2Eo2TDn/HC3Q==}
@@ -4534,9 +4534,9 @@ snapshots:
     dependencies:
       '@jridgewell/trace-mapping': 0.3.9
 
-  '@effect/vitest@4.0.0-beta.57(effect@4.0.0-beta.57)(vitest@4.1.4)':
+  '@effect/vitest@4.0.0-beta.59(effect@4.0.0-beta.59)(vitest@4.1.4)':
     dependencies:
-      effect: 4.0.0-beta.57
+      effect: 4.0.0-beta.59
       vitest: 4.1.4(@opentelemetry/api@1.9.0)(@types/node@25.0.3)(@vitest/browser-playwright@4.1.4)(msw@2.12.14(@types/node@25.0.3)(typescript@5.9.3))(vite@7.3.0(@types/node@25.0.3)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.3))
 
   '@emnapi/runtime@1.9.1':
@@ -6878,7 +6878,7 @@ snapshots:
       no-case: 3.0.4
       tslib: 2.8.1
 
-  effect@4.0.0-beta.57:
+  effect@4.0.0-beta.59:
     dependencies:
       '@standard-schema/spec': 1.1.0
       fast-check: 4.6.0
