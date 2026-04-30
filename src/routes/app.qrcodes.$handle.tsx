@@ -175,11 +175,7 @@ function QrCodeForm() {
     mutationFn: (data: typeof defaultValues) =>
       saveQrCode({ data: { handle, ...data } }),
     onSuccess: async (result) => {
-      if (handle === "new") {
-        await shopify.saveBar.hide("qr-code-form");
-        await navigate({ to: "/app" });
-        return;
-      }
+      await shopify.saveBar.hide("qr-code-form");
       if (result.handle !== handle) {
         await navigate({
           to: "/app/qrcodes/$handle",
