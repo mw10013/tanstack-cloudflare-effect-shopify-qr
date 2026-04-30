@@ -1,3 +1,4 @@
+import "@/lib/shopifyAppBridgeElements";
 import * as React from "react";
 
 import { useAppBridge } from "@shopify/app-bridge-react";
@@ -10,10 +11,10 @@ import { Effect, Option, Schema } from "effect";
 
 import { CurrentShopifySession } from "@/lib/CurrentShopifySession";
 import * as Domain from "@/lib/Domain";
+import { fieldError } from "@/lib/form";
 import { QrRepository } from "@/lib/QrRepository";
 import { QrService } from "@/lib/QrService";
 import { shopifyServerFnMiddleware } from "@/lib/ShopifyServerFnMiddleware";
-import { fieldError } from "@/lib/form";
 
 const QrFormInput = Domain.QrCodeUpsert;
 const qrCodeSaveBarId = "qr-code-form";
@@ -29,11 +30,7 @@ const DeleteQrInput = Schema.Struct({
 
 type QrFormState = Pick<
   Domain.QrCode,
-  | "title"
-  | "productTitle"
-  | "productImage"
-  | "productAlt"
-  | "destination"
+  "title" | "productTitle" | "productImage" | "productAlt" | "destination"
 > & {
   readonly id: Domain.QrCode["id"] | null;
   readonly handle: Domain.QrCode["handle"] | null;
@@ -74,9 +71,9 @@ const loadQrCode = createServerFn({ method: "GET" })
             shop,
           } satisfies QrFormState;
         }
-        const qrCodeHandle = yield* Schema.decodeUnknownEffect(Domain.QrCodeHandle)(
-          handle,
-        );
+        const qrCodeHandle = yield* Schema.decodeUnknownEffect(
+          Domain.QrCodeHandle,
+        )(handle);
         const qrCodeOption = yield* repository.findByHandle(qrCodeHandle);
         if (Option.isNone(qrCodeOption))
           return yield* Effect.fail(new Error("QR code not found"));
@@ -127,9 +124,9 @@ const saveQrCode = createServerFn({ method: "POST" })
             : yield* Schema.decodeUnknownEffect(Domain.QrCodeHandle)(
                 data.handle,
               );
-        return yield* repository.save(handle, input).pipe(
-          Effect.map(({ handle }) => ({ handle })),
-        );
+        return yield* repository
+          .save(handle, input)
+          .pipe(Effect.map(({ handle }) => ({ handle })));
       }),
     ),
   );

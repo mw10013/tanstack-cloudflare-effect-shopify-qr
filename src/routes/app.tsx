@@ -24,24 +24,20 @@
  */
 // oxlint-disable-next-line unicorn/require-module-specifiers -- see JSDoc above
 import type {} from "@shopify/polaris-types";
-import type { UISaveBarAttributes } from "@shopify/app-bridge-react";
-import { Outlet, createFileRoute, redirect, useLocation } from "@tanstack/react-router";
+
+import "@/lib/shopifyAppBridgeElements";
+import {
+  Outlet,
+  createFileRoute,
+  redirect,
+  useLocation,
+} from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { Effect, Redacted } from "effect";
 
-import { CurrentRequest } from "@/lib/CurrentRequest";
 import { AppProvider } from "@/components/AppProvider";
+import { CurrentRequest } from "@/lib/CurrentRequest";
 import { Shopify } from "@/lib/Shopify";
-
-declare module "react" {
-  // oxlint-disable-next-line typescript-eslint/no-namespace -- canonical JSX augmentation pattern
-  namespace JSX {
-    interface IntrinsicElements {
-      "s-app-nav": React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
-      "ui-save-bar": UISaveBarAttributes;
-    }
-  }
-}
 
 /**
  * Route-boundary Shopify auth for `/app` document requests.
@@ -61,10 +57,7 @@ declare module "react" {
  */
 const authenticateAppRoute = createServerFn({ method: "GET" })
   .inputValidator(
-    (input: {
-      readonly searchStr: string;
-      readonly pathname: string;
-    }) => input,
+    (input: { readonly searchStr: string; readonly pathname: string }) => input,
   )
   .handler(({ data, context: { runEffect } }) =>
     runEffect(
@@ -81,7 +74,8 @@ const authenticateAppRoute = createServerFn({ method: "GET" })
         const session = yield* shopify.authenticateAdmin(appRequest);
 
         if (session instanceof Response) {
-          const location = session.headers.get("Location") ?? session.headers.get("location");
+          const location =
+            session.headers.get("Location") ?? session.headers.get("location");
           if (location) return yield* Effect.fail(redirect({ href: location }));
           return yield* Effect.fail(session);
         }
@@ -92,7 +86,7 @@ const authenticateAppRoute = createServerFn({ method: "GET" })
         } as const;
       }),
     ),
-);
+  );
 
 export const Route = createFileRoute("/app")({
   /**
