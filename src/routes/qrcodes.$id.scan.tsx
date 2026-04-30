@@ -3,7 +3,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { Effect, Layer, Option, Schema } from "effect";
 
 import * as Domain from "@/lib/Domain";
-import { CurrentSession } from "@/lib/CurrentSession";
+import { CurrentShopifySession } from "@/lib/CurrentShopifySession";
 import { QrRepository } from "@/lib/QrRepository";
 import { QrService } from "@/lib/QrService";
 import { Shopify } from "@/lib/Shopify";
@@ -34,8 +34,8 @@ const scanQrCode = createServerFn({ method: "GET" })
         const shop = yield* Schema.decodeUnknownEffect(Domain.Shop)(data.shop);
         const shopify = yield* Shopify;
         const session = yield* shopify.unauthenticatedAdmin(shop);
-        const currentSessionLayer = Layer.succeed(CurrentSession, session);
-        const shopifyAdminLayer = Layer.provide(ShopifyAdmin.layer, currentSessionLayer);
+        const currentShopifySessionLayer = Layer.succeed(CurrentShopifySession, session);
+        const shopifyAdminLayer = Layer.provide(ShopifyAdmin.layer, currentShopifySessionLayer);
         const qrRepositoryLayer = Layer.provide(QrRepository.layer, shopifyAdminLayer);
         const qrServiceLayer = Layer.provide(QrService.layer, qrRepositoryLayer);
         const destination = yield* Effect.gen(function* () {

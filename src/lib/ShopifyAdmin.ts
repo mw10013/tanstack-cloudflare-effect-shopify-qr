@@ -1,12 +1,12 @@
 import { Context, Effect, Layer, Schema } from "effect";
 
-import { CurrentSession } from "@/lib/CurrentSession";
+import { CurrentShopifySession } from "@/lib/CurrentShopifySession";
 import { Shopify, ShopifyError } from "@/lib/Shopify";
 
 export class ShopifyAdmin extends Context.Service<ShopifyAdmin>()("ShopifyAdmin", {
   make: Effect.gen(function* () {
     const shopify = yield* Shopify;
-    const session = yield* CurrentSession;
+    const session = yield* CurrentShopifySession;
     const graphql = Effect.fn("ShopifyAdmin.graphql")(
       (query: string, options?: { readonly variables?: Record<string, unknown> }) =>
         shopify.graphql(session, query, options),

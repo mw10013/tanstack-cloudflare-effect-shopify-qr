@@ -8,7 +8,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { Effect, Option, Schema } from "effect";
 
-import { CurrentSession } from "@/lib/CurrentSession";
+import { CurrentShopifySession } from "@/lib/CurrentShopifySession";
 import * as Domain from "@/lib/Domain";
 import { QrRepository } from "@/lib/QrRepository";
 import { QrService } from "@/lib/QrService";
@@ -50,7 +50,7 @@ const loadQrCode = createServerFn({ method: "GET" })
   .handler(({ data: { id }, context: { runEffect } }) =>
     runEffect(
       Effect.gen(function* () {
-        const session = yield* CurrentSession;
+        const session = yield* CurrentShopifySession;
         const repository = yield* QrRepository;
         const service = yield* QrService;
         const shop = yield* Schema.decodeUnknownEffect(Domain.Shop)(

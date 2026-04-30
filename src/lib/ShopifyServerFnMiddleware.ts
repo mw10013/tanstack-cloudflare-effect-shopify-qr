@@ -3,7 +3,7 @@ import { createMiddleware } from "@tanstack/react-start";
 import { Effect, Layer } from "effect";
 
 import { CurrentRequest } from "@/lib/CurrentRequest";
-import { CurrentSession } from "@/lib/CurrentSession";
+import { CurrentShopifySession } from "@/lib/CurrentShopifySession";
 import { ProductRepository } from "@/lib/ProductRepository";
 import { QrRepository } from "@/lib/QrRepository";
 import { QrService } from "@/lib/QrService";
@@ -23,11 +23,11 @@ import { ShopifyAdmin } from "@/lib/ShopifyAdmin";
  * - verifies request/session with `shopify.authenticateAdmin(request)`
  * - injects `{ session }` into middleware context for handlers
  * - builds a session-scoped layer graph for server-function handlers:
- *   `CurrentSession -> ShopifyAdmin -> ProductRepository`
+  *   `CurrentShopifySession -> ShopifyAdmin -> ProductRepository`
  * - `runEffect` provides that composed layer in one shot, rather than chaining
  *   multiple `Effect.provide...` calls for each handler effect
  * - this keeps dependency wiring explicit and lets Effect construct the graph as
- *   layers: `ShopifyAdmin` needs `CurrentSession`; `ProductRepository` needs
+  *   layers: `ShopifyAdmin` needs `CurrentShopifySession`; `ProductRepository` needs
  *   `ShopifyAdmin`
  * - this is more efficient than repeated nested provides because the layer graph
  *   is built once per authenticated server-function request and then reused by
@@ -57,20 +57,20 @@ export const shopifyServerFnMiddleware = createMiddleware({ type: "function" })
           return yield* Effect.fail(session);
         }
 
-        const currentSessionLayer = Layer.succeed(CurrentSession, session);
-        const shopifyAdminLayer = Layer.provide(ShopifyAdmin.layer, currentSessionLayer);
+        const currentShopifySessionLayer = Layer.succeed(CurrentShopifySession, session);
+        const shopifyAdminLayer = Layer.provide(ShopifyAdmin.layer, currentShopifySessionLayer);
         const productRepositoryLayer = Layer.provide(ProductRepository.layer, shopifyAdminLayer);
         const qrRepositoryLayer = Layer.provide(QrRepository.layer, shopifyAdminLayer);
         const qrServiceLayer = Layer.provide(QrService.layer, qrRepositoryLayer);
         const serverFnLayer = Layer.mergeAll(
-          currentSessionLayer,
+          currentShopifySessionLayer,
           shopifyAdminLayer,
           productRepositoryLayer,
           qrRepositoryLayer,
           qrServiceLayer,
         );
         const runEffect = <A, E>(
-          effect: Effect.Effect<A, E, ProductRepository | QrRepository | QrService | ShopifyAdmin | CurrentSession>,
+          effect: Effect.Effect<A, E, ProductRepository | QrRepository | QrService | ShopifyAdmin | CurrentShopifySession>,
         ) =>
           context.runEffect(effect.pipe(Effect.provide(serverFnLayer)));
 
