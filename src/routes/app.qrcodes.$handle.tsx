@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { SaveBar, useAppBridge } from "@shopify/app-bridge-react";
+import { useAppBridge } from "@shopify/app-bridge-react";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useMutation } from "@tanstack/react-query";
 import { useHydrated, useRouter } from "@tanstack/react-router";
@@ -16,6 +16,7 @@ import { shopifyServerFnMiddleware } from "@/lib/ShopifyServerFnMiddleware";
 import { fieldError } from "@/lib/form";
 
 const QrFormInput = Domain.QrCodeUpsert;
+const qrCodeSaveBarId = "qr-code-form";
 
 const SaveQrCodeInput = Schema.Struct({
   handle: Schema.NonEmptyString,
@@ -252,6 +253,16 @@ function QrCodeForm() {
     saveMutation.reset();
   };
 
+  const leave: NonNullable<React.ComponentProps<"s-link">["onClick"]> = (
+    event,
+  ) => {
+    event.preventDefault();
+    void (async () => {
+      await shopify.saveBar.leaveConfirmation();
+      void navigate({ to: "/app" });
+    })();
+  };
+
   return (
     <>
       <form.Subscribe
@@ -263,18 +274,19 @@ function QrCodeForm() {
         }
       >
         {(isDirty) => (
-          <SaveBar id="qr-code-form" open={isDirty}>
-            <button
-              variant="primary"
-              onClick={() => void form.handleSubmit()}
-              disabled={saveMutation.isPending}
-            />
-            <button onClick={() => void reset()} />
-          </SaveBar>
+          <QrCodeSaveBarVisibility isDirty={isDirty} shopify={shopify} />
         )}
       </form.Subscribe>
+      <ui-save-bar id={qrCodeSaveBarId}>
+        <button
+          variant="primary"
+          onClick={() => void form.handleSubmit()}
+          disabled={saveMutation.isPending}
+        />
+        <button onClick={() => void reset()} />
+      </ui-save-bar>
       <s-page heading={loaderData.handle ? loaderData.title : "Create QR code"}>
-        <s-link href="/app" slot="breadcrumb-actions">
+        <s-link href="/app" slot="breadcrumb-actions" onClick={leave}>
           QR codes
         </s-link>
         {loaderData.id && isHydrated && (
@@ -485,4 +497,25 @@ function QrCodeForm() {
       </s-page>
     </>
   );
+}
+
+function QrCodeSaveBarVisibility({
+  isDirty,
+  shopify,
+}: {
+  readonly isDirty: boolean;
+  readonly shopify: ReturnType<typeof useAppBridge>;
+}) {
+  React.useEffect(() => {
+    void shopify.saveBar[isDirty ? "show" : "hide"](qrCodeSaveBarId);
+  }, [isDirty, shopify]);
+
+  React.useEffect(
+    () => () => {
+      void shopify.saveBar.hide(qrCodeSaveBarId);
+    },
+    [shopify],
+  );
+
+  return null;
 }

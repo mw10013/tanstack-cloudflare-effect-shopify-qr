@@ -24,6 +24,7 @@
  */
 // oxlint-disable-next-line unicorn/require-module-specifiers -- see JSDoc above
 import type {} from "@shopify/polaris-types";
+import type { UISaveBarAttributes } from "@shopify/app-bridge-react";
 import { Outlet, createFileRoute, redirect, useLocation } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { Effect, Redacted } from "effect";
@@ -37,6 +38,7 @@ declare module "react" {
   namespace JSX {
     interface IntrinsicElements {
       "s-app-nav": React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
+      "ui-save-bar": UISaveBarAttributes;
     }
   }
 }
