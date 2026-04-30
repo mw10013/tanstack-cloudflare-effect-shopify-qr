@@ -1,3 +1,10 @@
+/**
+ * Activates React 19 module augmentation for Polaris web component JSX types.
+ * `import type` is erased, so Vite never resolves the package at runtime.
+ */
+// oxlint-disable-next-line unicorn/require-module-specifiers -- see JSDoc above
+import type {} from "@shopify/polaris-types";
+
 import * as React from "react";
 import { useNavigate } from "@tanstack/react-router";
 
