@@ -207,10 +207,12 @@ function QrCodeForm() {
       state.values.destination !== defaultValues.destination,
   );
 
+  /** Syncs TanStack Form dirty state to Shopify's programmatic Save Bar API. */
   React.useEffect(() => {
     void shopify.saveBar[isDirty ? "show" : "hide"](qrCodeSaveBarId);
   }, [isDirty, shopify]);
 
+  /** Ensures the Shopify Save Bar is hidden when leaving this route. */
   React.useEffect(
     () => () => {
       void shopify.saveBar.hide(qrCodeSaveBarId);
