@@ -19,7 +19,7 @@ import { Route as AppAdditionalRouteImport } from './routes/app.additional'
 import { Route as WebhooksAppUninstalledRouteImport } from './routes/webhooks.app.uninstalled'
 import { Route as WebhooksAppScopes_updateRouteImport } from './routes/webhooks.app.scopes_update'
 import { Route as QrcodesIdScanRouteImport } from './routes/qrcodes.$id.scan'
-import { Route as AppQrcodesIdRouteImport } from './routes/app.qrcodes.$id'
+import { Route as AppQrcodesHandleRouteImport } from './routes/app.qrcodes.$handle'
 
 const AppRoute = AppRouteImport.update({
   id: '/app',
@@ -72,9 +72,9 @@ const QrcodesIdScanRoute = QrcodesIdScanRouteImport.update({
   path: '/qrcodes/$id/scan',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppQrcodesIdRoute = AppQrcodesIdRouteImport.update({
-  id: '/qrcodes/$id',
-  path: '/qrcodes/$id',
+const AppQrcodesHandleRoute = AppQrcodesHandleRouteImport.update({
+  id: '/qrcodes/$handle',
+  path: '/qrcodes/$handle',
   getParentRoute: () => AppRoute,
 } as any)
 
@@ -86,7 +86,7 @@ export interface FileRoutesByFullPath {
   '/auth/$': typeof AuthSplatRoute
   '/auth/login': typeof AuthLoginRoute
   '/app/': typeof AppIndexRoute
-  '/app/qrcodes/$id': typeof AppQrcodesIdRoute
+  '/app/qrcodes/$handle': typeof AppQrcodesHandleRoute
   '/qrcodes/$id/scan': typeof QrcodesIdScanRoute
   '/webhooks/app/scopes_update': typeof WebhooksAppScopes_updateRoute
   '/webhooks/app/uninstalled': typeof WebhooksAppUninstalledRoute
@@ -98,7 +98,7 @@ export interface FileRoutesByTo {
   '/auth/$': typeof AuthSplatRoute
   '/auth/login': typeof AuthLoginRoute
   '/app': typeof AppIndexRoute
-  '/app/qrcodes/$id': typeof AppQrcodesIdRoute
+  '/app/qrcodes/$handle': typeof AppQrcodesHandleRoute
   '/qrcodes/$id/scan': typeof QrcodesIdScanRoute
   '/webhooks/app/scopes_update': typeof WebhooksAppScopes_updateRoute
   '/webhooks/app/uninstalled': typeof WebhooksAppUninstalledRoute
@@ -112,7 +112,7 @@ export interface FileRoutesById {
   '/auth/$': typeof AuthSplatRoute
   '/auth/login': typeof AuthLoginRoute
   '/app/': typeof AppIndexRoute
-  '/app/qrcodes/$id': typeof AppQrcodesIdRoute
+  '/app/qrcodes/$handle': typeof AppQrcodesHandleRoute
   '/qrcodes/$id/scan': typeof QrcodesIdScanRoute
   '/webhooks/app/scopes_update': typeof WebhooksAppScopes_updateRoute
   '/webhooks/app/uninstalled': typeof WebhooksAppUninstalledRoute
@@ -127,7 +127,7 @@ export interface FileRouteTypes {
     | '/auth/$'
     | '/auth/login'
     | '/app/'
-    | '/app/qrcodes/$id'
+    | '/app/qrcodes/$handle'
     | '/qrcodes/$id/scan'
     | '/webhooks/app/scopes_update'
     | '/webhooks/app/uninstalled'
@@ -139,7 +139,7 @@ export interface FileRouteTypes {
     | '/auth/$'
     | '/auth/login'
     | '/app'
-    | '/app/qrcodes/$id'
+    | '/app/qrcodes/$handle'
     | '/qrcodes/$id/scan'
     | '/webhooks/app/scopes_update'
     | '/webhooks/app/uninstalled'
@@ -152,7 +152,7 @@ export interface FileRouteTypes {
     | '/auth/$'
     | '/auth/login'
     | '/app/'
-    | '/app/qrcodes/$id'
+    | '/app/qrcodes/$handle'
     | '/qrcodes/$id/scan'
     | '/webhooks/app/scopes_update'
     | '/webhooks/app/uninstalled'
@@ -240,11 +240,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof QrcodesIdScanRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/app/qrcodes/$id': {
-      id: '/app/qrcodes/$id'
-      path: '/qrcodes/$id'
-      fullPath: '/app/qrcodes/$id'
-      preLoaderRoute: typeof AppQrcodesIdRouteImport
+    '/app/qrcodes/$handle': {
+      id: '/app/qrcodes/$handle'
+      path: '/qrcodes/$handle'
+      fullPath: '/app/qrcodes/$handle'
+      preLoaderRoute: typeof AppQrcodesHandleRouteImport
       parentRoute: typeof AppRoute
     }
   }
@@ -254,14 +254,14 @@ interface AppRouteChildren {
   AppAdditionalRoute: typeof AppAdditionalRoute
   AppTemplateDemoRoute: typeof AppTemplateDemoRoute
   AppIndexRoute: typeof AppIndexRoute
-  AppQrcodesIdRoute: typeof AppQrcodesIdRoute
+  AppQrcodesHandleRoute: typeof AppQrcodesHandleRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppAdditionalRoute: AppAdditionalRoute,
   AppTemplateDemoRoute: AppTemplateDemoRoute,
   AppIndexRoute: AppIndexRoute,
-  AppQrcodesIdRoute: AppQrcodesIdRoute,
+  AppQrcodesHandleRoute: AppQrcodesHandleRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

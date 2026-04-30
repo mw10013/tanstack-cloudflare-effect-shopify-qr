@@ -64,7 +64,7 @@ function QrCodeTable({ qrCodes }: { readonly qrCodes: Awaited<ReturnType<typeof 
         </s-table-header-row>
         <s-table-body>
           {qrCodes.map((qrCode) => {
-            const href = router.buildLocation({ to: "/app/qrcodes/$id", params: { id: qrCode.handle } }).publicHref;
+            const href = router.buildLocation({ to: "/app/qrcodes/$handle", params: { handle: qrCode.handle } }).publicHref;
             return <s-table-row key={qrCode.handle} id={qrCode.handle}>
               <s-table-cell>
                 <s-stack direction="inline" gap="small" alignItems="center">

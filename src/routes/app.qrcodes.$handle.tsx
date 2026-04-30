@@ -18,7 +18,7 @@ import { fieldError } from "@/lib/form";
 const QrFormInput = Domain.QrCodeUpsert;
 
 const SaveQrCodeInput = Schema.Struct({
-  routeId: Schema.NonEmptyString,
+  handle: Schema.NonEmptyString,
   ...QrFormInput.fields,
 });
 
@@ -46,8 +46,8 @@ type QrFormState = Pick<
 
 const loadQrCode = createServerFn({ method: "GET" })
   .middleware([shopifyServerFnMiddleware])
-  .inputValidator((input: { readonly id: string }) => input)
-  .handler(({ data: { id }, context: { runEffect } }) =>
+  .inputValidator((input: { readonly handle: string }) => input)
+  .handler(({ data: { handle }, context: { runEffect } }) =>
     runEffect(
       Effect.gen(function* () {
         const session = yield* CurrentShopifySession;
@@ -56,7 +56,7 @@ const loadQrCode = createServerFn({ method: "GET" })
         const shop = yield* Schema.decodeUnknownEffect(Domain.Shop)(
           session.shop,
         );
-        if (id === "new") {
+        if (handle === "new") {
           return {
             id: null,
             handle: null,
@@ -73,10 +73,10 @@ const loadQrCode = createServerFn({ method: "GET" })
             shop,
           } satisfies QrFormState;
         }
-        const handle = yield* Schema.decodeUnknownEffect(Domain.QrCodeHandle)(
-          id,
+        const qrCodeHandle = yield* Schema.decodeUnknownEffect(Domain.QrCodeHandle)(
+          handle,
         );
-        const qrCodeOption = yield* repository.findByHandle(handle);
+        const qrCodeOption = yield* repository.findByHandle(qrCodeHandle);
         if (Option.isNone(qrCodeOption))
           return yield* Effect.fail(new Error("QR code not found"));
         const qrCode = qrCodeOption.value;
@@ -121,10 +121,10 @@ const saveQrCode = createServerFn({ method: "POST" })
           destination: data.destination,
         } satisfies Domain.QrCodeUpsert;
         const handle =
-          data.routeId === "new"
+          data.handle === "new"
             ? yield* service.generateHandle(input.title)
             : yield* Schema.decodeUnknownEffect(Domain.QrCodeHandle)(
-                data.routeId,
+                data.handle,
               );
         return yield* repository.save(handle, input).pipe(
           Effect.map(({ handle }) => ({ handle })),
@@ -145,14 +145,14 @@ const deleteQrCode = createServerFn({ method: "POST" })
     ),
   );
 
-export const Route = createFileRoute("/app/qrcodes/$id")({
-  loader: ({ params }) => loadQrCode({ data: { id: params.id } }),
+export const Route = createFileRoute("/app/qrcodes/$handle")({
+  loader: ({ params }) => loadQrCode({ data: { handle: params.handle } }),
   component: QrCodeForm,
 });
 
 function QrCodeForm() {
   const loaderData = Route.useLoaderData();
-  const { id } = Route.useParams();
+  const { handle } = Route.useParams();
   const router = useRouter();
   const navigate = useNavigate();
   const shopify = useAppBridge();
@@ -173,17 +173,17 @@ function QrCodeForm() {
   >(null);
   const saveMutation = useMutation({
     mutationFn: (data: typeof defaultValues) =>
-      saveQrCode({ data: { routeId: id, ...data } }),
+      saveQrCode({ data: { handle, ...data } }),
     onSuccess: async (result) => {
-      if (id === "new") {
+      if (handle === "new") {
         await shopify.saveBar.hide("qr-code-form");
         await navigate({ to: "/app" });
         return;
       }
-      if (result.handle !== id) {
+      if (result.handle !== handle) {
         await navigate({
-          to: "/app/qrcodes/$id",
-          params: { id: result.handle },
+          to: "/app/qrcodes/$handle",
+          params: { handle: result.handle },
         });
         return;
       }
@@ -246,7 +246,7 @@ function QrCodeForm() {
   };
 
   const reset = async () => {
-    if (id === "new") {
+    if (handle === "new") {
       await shopify.saveBar.hide("qr-code-form");
       void navigate({ to: "/app" });
       return;
