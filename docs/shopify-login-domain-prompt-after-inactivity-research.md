@@ -1,120 +1,203 @@
 # Shopify Login "Domain Prompt" After Inactivity
 
-## What You're Seeing
+## What Is Actually Happening
 
-The page at `/auth/login` — an HTML form asking for "Shop domain" (`auth.login.ts:18-43`). It appears after a period of inactivity, then disappears after a full page refresh.
+After some inactivity, clicking an in-app action like "Create QR code" can land the embedded app on `/auth/login`, which renders a form asking for a shop domain.
 
-## App Bridge's Design: Ephemeral URL Params
+That symptom is real in the current codebase:
 
-App Bridge explicitly strips Shopify-specific params from URLs after the initial load (`docs/app-bridge.js`, line 152):
+- The QR index CTA is `<s-button href="/app/qrcodes/new" ...>` in `src/routes/app.index.tsx:45,103`.
+- The target route is `/app/qrcodes/$handle`, with the `new` case handled by `src/routes/app.qrcodes.$handle.tsx:45-149`.
+- Auth is enforced at the `/app` layout boundary in `src/routes/app.tsx:31-79` and again in server functions via `src/lib/ShopifyServerFnMiddleware.ts:46-83`.
+- `shopify.authenticateAdmin` redirects document requests with missing `shop` or `host` to `/auth/login` in `src/lib/Shopify.ts:464-470`.
 
-```js
-const M = ["hmac","locale","protocol","session","id_token","shop","timestamp","host","embedded","appLoadId","link_source"];
-function x(t) { const n=new URL(t); return M.forEach(t=>n.searchParams.delete(t)), n }
-```
+So the domain prompt is not random. It is the app's real `/auth/login` route.
 
-These params exist only on the initial document load. After that, App Bridge owns auth through other means — they're intentionally gone. **You never see `?shop&host` in the URL during navigation because App Bridge removes them by design.**
+## Why `/auth/login` Asks For A Domain
 
-## Why Navigation Works Without shop/host
+The `/auth/login` route is intentionally a generic Shopify login fallback:
 
-App Bridge patches `window.fetch` (line 348) and adds `Authorization: Bearer <token>` to all requests to the app's own domain:
+- `src/routes/auth.login.ts:45-80` calls `shopify.login(request)` on both GET and POST.
+- `src/lib/Shopify.ts:561-595` mirrors Shopify's `loginFactory` behavior.
+- On `GET /auth/login` with no `shop` query param, `shopify.login()` returns `{}` and the route renders the HTML form asking for `shop`.
 
-```js
-// l = true when request URL is app's own hostname
-const l = u.protocol===location.protocol && (u.hostname===location.hostname || ...) || c.includes(u.origin);
-const m = l && !s.headers.has("Authorization");
-m && s.headers.set("Authorization", "Bearer " + await t.idToken());
-```
+That is upstream Shopify behavior too:
 
-TanStack server fn calls (`authenticateAppRoute`) go to the app's own domain → `l=true` → Authorization header added → server sets `isDocumentRequest=false` (Shopify.ts:464) → the `!shop || !host` check (Shopify.ts:467) is **never reached**.
-
-App Bridge also handles 401 retry automatically (lines 370-372):
-
-```js
-if (b.headers.get("X-Shopify-Retry-Invalid-Session-Request") && m)
-  w.headers.set("Authorization", "Bearer " + await t.idToken()); // fresh token
-  b = await i(w); // retry
-```
-
-## How `idToken()` Works
-
-`idToken()` communicates with the Shopify Admin parent frame (lines 382-388):
-
-```js
-t.idToken = async function() {
-  const {idToken:t} = await e || {};
-  return t ? await t() : new Promise(t => {
-    n.subscribe("SessionToken.respond", ({sessionToken:n}) => {t(n)}, {once:true}),
-    n.send("SessionToken.request")  // asks parent frame
-  })
+```ts
+if (request.method === 'GET' && !shopParam) {
+  return {};
 }
 ```
 
-If the internal API isn't available, it sends `SessionToken.request` to the Shopify Admin parent frame and **waits indefinitely** for `SessionToken.respond`. There is no timeout.
+`refs/shopify-app-js/packages/apps/shopify-app-remix/src/server/authenticate/login/login.ts:8-18`
 
-## Why It Breaks After Inactivity
+And Shopify's docs describe `shopify.login` as the helper used to create a login page with a shop-domain form:
 
-When the Shopify Admin parent frame session expires:
+- `refs/shopify-app-js/packages/apps/shopify-app-remix/src/server/types.ts:420-470`
 
-1. User navigates → TanStack calls `authenticateAppRoute` via fetch
-2. App Bridge intercepts fetch → calls `await t.idToken()`
-3. `idToken()` sends `SessionToken.request` to parent frame
-4. Parent frame session has expired → **no response**
-5. `idToken()` hangs forever — no timeout
-6. The fetch never completes → `beforeLoad` is stuck → app is frozen
-7. User hard-refreshes the page
-8. That refresh is a **document request** (no Authorization header) to the current URL — which has no `?shop&host` because App Bridge stripped them
-9. Server: `isDocumentRequest=true`, `!shop || !host` → `Response.redirect('/auth/login')` → login form
+So the weird part is not the form itself. The weird part is why an already-embedded merchant flow ends up there.
 
-## Why Refresh Fixes It
+## `idToken()` Is Probably A Red Herring
 
-The hard refresh reloads the full browser page including the Shopify Admin parent frame. The admin re-establishes its session, then re-embeds the app iframe with a freshly-constructed URL:
+The earlier theory spent too much time on App Bridge `idToken()` hanging.
 
+That does not match the reported symptom.
+
+The reported symptom is:
+
+1. Merchant clicks an in-app link like "Create QR code".
+2. The app comes back with `/auth/login` asking for a shop domain.
+3. A browser refresh on that login page gets the merchant back into the app.
+
+That is not a "the app visibly froze and then the merchant hard-refreshed out of frustration" story.
+
+Current working assumption: `idToken()` hanging is not the issue here.
+
+## Why Navigation Usually Works Without `shop` In The URL
+
+You generally do not see `shop` in the browser address bar during normal embedded app navigation, and that is not inherently a bug.
+
+In this app, normal embedded navigation is expected to work without visible Shopify auth params in the URL because:
+
+- The `/app` tree is rendered inside Shopify Admin with App Bridge loaded by `src/components/AppProvider.tsx:13-30`.
+- App Bridge + the `shopify:navigate` bridge convert Shopify web component links into client-side navigation.
+- Auth for server-function and loader-like requests is expected to come from embedded request context, not from visible `shop`/`host` params on every URL.
+
+So this is the important distinction:
+
+- Normal in-app SPA navigation: visible `shop` param often not needed.
+- Full document request to `/app/...`: `shopify.authenticateAdmin` may require `shop` and `host` and will redirect to `/auth/login` if they are missing.
+
+That is exactly what `src/lib/Shopify.ts:464-470` does.
+
+## The Reference Apps Also Use Bare Internal Links
+
+Yes. Both reference apps use bare internal links without carrying `shop` in the href.
+
+### `refs/shopify-app-qr`
+
+The QR reference uses the same kind of bare internal links:
+
+- `<s-button href="/app/qrcodes/new">` in `refs/shopify-app-qr/app/routes/app._index.jsx:41-43`
+- `<s-clickable href={`/app/qrcodes/${qrCode.handle}`}>` in `refs/shopify-app-qr/app/routes/app._index.jsx:84-98`
+- `<s-link href={`/app/qrcodes/${qrCode.handle}`}>` in `refs/shopify-app-qr/app/routes/app._index.jsx:99-101`
+- `<s-link slot="secondary-actions" href="/app/qrcodes/new">` in `refs/shopify-app-qr/app/routes/app._index.jsx:127-129`
+- `<s-link href="/app">` in `refs/shopify-app-qr/app/routes/app.qrcodes.$id.jsx:187`
+
+### `refs/shopify-app-template`
+
+The template also uses bare internal links:
+
+- `<s-link href="/app">Home</s-link>` in `refs/shopify-app-template/app/routes/app.tsx:21`
+- `<s-link href="/app/additional">Additional page</s-link>` in `refs/shopify-app-template/app/routes/app.tsx:22`
+- `<s-link href="/app/additional">` in `refs/shopify-app-template/app/routes/app._index.tsx:119`
+
+So "bare internal link" by itself is not the bug. Shopify's own reference apps do it too.
+
+## What "Fallback To A Document Navigation" Means
+
+The phrase "link degrades" was too vague.
+
+What I mean exactly is this:
+
+- Intended behavior: clicking `<s-button href="/app/qrcodes/new">` is intercepted by the embedded app shell and handled as an in-app client-side route change.
+- Failure behavior: the browser performs a normal full-page `GET /app/qrcodes/new` document request instead.
+
+That is not a metaphor. It is a concrete difference in request shape.
+
+Why it matters:
+
+- For a client-side transition, the embedded app machinery can keep navigation inside the already-running app shell.
+- For a full document request, `shopify.authenticateAdmin` runs its document-request path, and that path redirects to `/auth/login` when `shop` or `host` is missing.
+
+The relevant branch is:
+
+```ts
+const isDocumentRequest = !headerSessionToken;
+
+if (isDocumentRequest) {
+  if (!shop || !host) {
+    return Response.redirect(new URL("/auth/login", request.url).toString());
+  }
+}
 ```
-?shop=xxx.myshopify.com&host=xxx&embedded=1&id_token=xxx
-```
 
-That document request has all the params → server takes the full auth path → success.
+`src/lib/Shopify.ts:464-470`
 
-## Auto-Redirect Does NOT Fire Here
+So the concrete question is not "did the link degrade?" in an abstract sense.
 
-App Bridge's auto-redirect only fires when the app is the top-level window (line 1863-1864):
+The concrete question is:
 
-```js
-if (top===window && !E() && !b.config.disabledFeatures?.includes("auto-redirect") || T)
-  return location.assign(a);
-```
+- Did this click become a full document request to `/app/qrcodes/new`?
+- Or did some server-function request lose auth context and get rerouted?
 
-While embedded in Shopify Admin, `top !== window` — auto-redirect never triggers.
+## Current Best Hypothesis
 
-## Flow Summary
+Current best hypothesis:
 
-| Scenario | Authorization header | shop+host in URL | Result |
-|---|---|---|---|
-| Initial document load (Shopify Admin injects params) | No | Yes | Full auth path succeeds |
-| Client-side nav (App Bridge patches fetch) | Yes (auto-injected) | No | XHR path, shop/host irrelevant |
-| 401 / expired token during fetch | Yes → retry with fresh token | No | App Bridge retries transparently |
-| Parent frame session expired → `idToken()` hangs → user hard-refreshes | No | No (stripped by App Bridge) | Login form |
+1. Merchant is in the embedded app after inactivity.
+2. Merchant clicks `Create QR code`.
+3. Instead of staying in the normal client-side navigation path, the app winds up on a request path that `authenticateAdmin` treats as a document request.
+4. That request lacks usable `shop` / `host`.
+5. `authenticateAdmin` redirects to `/auth/login`.
+6. `/auth/login` renders the generic shop-domain form because it has no `shop` query param.
+7. Refresh reloads Shopify Admin and re-embeds the app, so the merchant gets back in.
 
-## Effective Fixes
+What is still unproven is step 3: which exact request shape is failing.
 
-The root problem is that when the parent frame is unresponsive, `idToken()` hangs with no timeout, freezing the app until the user hard-refreshes to a URL with no shop/host.
+## Confirmed Redirect Path To `/auth/login`
 
-**Option A — Client-side timeout + redirect (most correct)**
-Wrap `shopify.idToken()` calls with a timeout on the client. If it doesn't resolve in N seconds, explicitly call `location.assign(shopify.config.host ? atob(shopify.config.host) : ...)` to navigate to the Shopify Admin — the same URL auto-redirect would use, but triggered by the app. This avoids the stuck state entirely.
+The confirmed redirect path is simple.
 
-**Option B — Preserve `shop` as a TanStack route search param**
-Define `shop` in the `/app` route's `validateSearch`. TanStack Router preserves it across client-side navigations. On hard refresh, the URL still has `?shop=xxx` → server redirects to `/auth/login?shop=xxx` → `shopify.login()` auto-redirects to OAuth → Shopify Admin re-embeds with full params → no manual domain entry.
+### Document Request Missing `shop` / `host`
 
-**Option C — Accept it**
-The reference template has identical behavior. In production usage, Shopify Admin session expiry after long inactivity is rare. The login form is the designed fallback; the user enters or re-navigates and recovers.
+`src/lib/Shopify.ts:464-470` redirects any document request with missing `shop` or `host` to `/auth/login`.
 
-## Relevant Code
+This matches upstream Shopify behavior too. Their tests expect missing `shop` / `host` on document requests to redirect to the login path:
 
-- `docs/app-bridge.js:152` — `M` array: params App Bridge strips from URLs
-- `docs/app-bridge.js:348-379` — fetch interceptor: Authorization injection and 401 retry
-- `docs/app-bridge.js:382-388` — `idToken()`: hangs if parent frame unresponsive
-- `docs/app-bridge.js:1863-1864` — auto-redirect: only when not in iframe
-- `Shopify.ts:464` — `isDocumentRequest = !headerSessionToken`
-- `Shopify.ts:466-470` — `!shop || !host` check, document requests only
-- `app.tsx:60-93` — `authenticateAppRoute` server fn, called via App Bridge-patched fetch
+- `refs/shopify-app-js/packages/apps/shopify-app-remix/src/server/authenticate/admin/__tests__/doc-request-path.test.ts:16-36`
+
+### Redirect Responses Become Router Redirects
+
+Both auth entry points convert redirect `Response`s into TanStack router redirects:
+
+- `/app` layout `beforeLoad`: `src/routes/app.tsx:47-53`
+- Server function middleware: `src/lib/ShopifyServerFnMiddleware.ts:52-58`
+
+So once auth decides on `/auth/login`, the app can end up there immediately.
+
+## Observability We Need
+
+Yes, we should instrument this.
+
+The right observability is around `shopify.authenticateAdmin` in `src/lib/Shopify.ts`, specifically before the document/XHR split and before each auth redirect.
+
+For each suspicious request, log:
+
+- pathname
+- full request URL
+- whether `authorization` header is present
+- whether `shop` exists
+- whether `host` exists
+- whether `id_token` exists
+- computed `isDocumentRequest`
+- whether the request is going to `/app/qrcodes/new`, `/app`, `/auth/login`, or a server-function endpoint
+- whether auth returned a redirect, 401, or authenticated session
+
+That will let us answer the only question that matters right now:
+
+- Is the bad path a full document request to `/app/qrcodes/new`?
+- Or is it a server-function/auth-context failure?
+
+## Bottom Line
+
+The domain prompt is Shopify's standard `/auth/login` fallback form. That part is expected.
+
+What is not expected is getting sent there from an already-embedded merchant click.
+
+The important facts now are:
+
+- `idToken()` is probably unrelated.
+- Not seeing `shop` in the address bar during normal navigation is normal.
+- Shopify's own reference apps also use bare internal links.
+- The failure we need to observe is a specific request-shape failure: normal client-side app navigation versus full document request/auth fallback.

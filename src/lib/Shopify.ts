@@ -462,9 +462,29 @@ export class Shopify extends Context.Service<Shopify>()("Shopify", {
         const searchParamSessionToken = url.searchParams.get("id_token");
         const sessionToken = headerSessionToken ?? searchParamSessionToken;
         const isDocumentRequest = !headerSessionToken;
+        const logAuth = (
+          event: string,
+          extra?: Readonly<Record<string, unknown>>,
+        ) =>
+          Effect.logDebug("Shopify.authenticateAdmin").pipe(
+            Effect.annotateLogs({
+              event,
+              pathname: url.pathname,
+              requestUrl: request.url,
+              hasAuthorizationHeader: Boolean(headerSessionToken),
+              hasShop: Boolean(shop),
+              hasHost: Boolean(host),
+              hasIdToken: Boolean(searchParamSessionToken),
+              isDocumentRequest,
+              ...extra,
+            }),
+          );
+
+        yield* logAuth("start");
 
         if (isDocumentRequest) {
           if (!shop || !host) {
+            yield* logAuth("redirect-login-missing-shop-host");
             return Response.redirect(
               new URL("/auth/login", request.url).toString(),
             );
@@ -473,6 +493,7 @@ export class Shopify extends Context.Service<Shopify>()("Shopify", {
             const embeddedUrl = yield* tryShopifyPromise(() =>
               shopify.auth.getEmbeddedAppUrl({ rawRequest: request }),
             );
+            yield* logAuth("redirect-embedded-app-url", { embeddedUrl });
             return Response.redirect(embeddedUrl);
           }
           if (!searchParamSessionToken) {
@@ -482,6 +503,9 @@ export class Shopify extends Context.Service<Shopify>()("Shopify", {
               "shopify-reload",
               `${config.appUrl}${url.pathname}?${searchParams.toString()}`,
             );
+            yield* logAuth("redirect-session-token-bounce", {
+              bouncePath: `/auth/session-token?${searchParams.toString()}`,
+            });
             return Response.redirect(
               new URL(
                 `/auth/session-token?${searchParams.toString()}`,
@@ -492,6 +516,7 @@ export class Shopify extends Context.Service<Shopify>()("Shopify", {
         }
 
         if (!sessionToken) {
+          yield* logAuth("unauthorized-missing-session-token");
           return new Response("Unauthorized", { status: 401 });
         }
 
@@ -512,7 +537,14 @@ export class Shopify extends Context.Service<Shopify>()("Shopify", {
               }),
           ),
         );
-        if (decoded instanceof Response) return decoded;
+        if (decoded instanceof Response) {
+          yield* logAuth("respond-invalid-session-token-after-decode", {
+            status: decoded.status,
+            location: decoded.headers.get("location") ?? decoded.headers.get("Location"),
+            retryHeader: decoded.headers.get("X-Shopify-Retry-Invalid-Session-Request"),
+          });
+          return decoded;
+        }
         const sessionShop = yield* Schema.decodeUnknownEffect(Domain.Shop)(
           new URL(decoded.dest).hostname,
         ).pipe(Effect.mapError((cause) => new ShopifyError({ message: "Invalid shop domain", cause })));
@@ -523,6 +555,7 @@ export class Shopify extends Context.Service<Shopify>()("Shopify", {
           Option.isSome(existingSession) &&
           existingSession.value.isActive(undefined, WITHIN_MILLISECONDS_OF_EXPIRY)
         ) {
+          yield* logAuth("return-existing-session", { sessionShop });
           return existingSession.value;
         }
 
@@ -553,8 +586,16 @@ export class Shopify extends Context.Service<Shopify>()("Shopify", {
               }),
           ),
         );
-        if (exchanged instanceof Response) return exchanged;
+        if (exchanged instanceof Response) {
+          yield* logAuth("respond-invalid-session-token-after-exchange", {
+            status: exchanged.status,
+            location: exchanged.headers.get("location") ?? exchanged.headers.get("Location"),
+            retryHeader: exchanged.headers.get("X-Shopify-Retry-Invalid-Session-Request"),
+          });
+          return exchanged;
+        }
         yield* storeSession(exchanged.session);
+        yield* logAuth("store-exchanged-session", { sessionShop });
         return exchanged.session;
       },
     );
