@@ -247,9 +247,95 @@ That is enough to distinguish:
 - full document-request fallback to `/auth/login`
 - versus embedded auth/session failure on a server-function path
 
-I do not think we need more server-side diagnostics before the next reproduction.
+The one caveat is process lifetime.
+
+- These logs are only useful if the failure happens before the dev server is restarted.
+- After a restart, `logs/server.log` only shows post-restart requests, so an overnight transition that happened earlier is no longer observable from this file.
+
+So for the next overnight/inactivity reproduction, the most important operational detail is: do not restart the dev server before checking the log.
 
 If these logs still leave ambiguity after a real failure trace, the next increment would be client-side click/navigation telemetry. But that is not necessary yet.
+
+## Morning Restart Observation
+
+There is now one more real-world observation to account for.
+
+After the local dev server was restarted in the morning, the already-open browser window was showing the shop-domain login form. It is unknown whether that transition happened:
+
+- before the restart, during overnight inactivity
+- or only after the restart
+
+The visible UI was also mixed in a way that matters:
+
+- the login domain form was visible
+- stale app chrome was still visible too
+- clicking the apparent `Create QR code` action repeatedly did nothing
+- clicking the breadcrumb back to the home page recovered the app
+
+That behavior does not cleanly match a fresh, ordinary `/auth/login` render.
+
+## What The Restart-Era Log Actually Shows
+
+The restarted log is short and only captures one post-start navigation/auth sequence:
+
+- `logs/server.log:29-60` shows `/app` auth through `app-beforeLoad-serverfn`
+- `logs/server.log:61-89` shows `/app` auth through `serverfn-middleware`
+
+The important details from that sequence are:
+
+- pathname is `/app`, not `/auth/login`
+- `hasAuthorizationHeader: false`
+- `hasShop: true`
+- `hasHost: true`
+- `hasIdToken: true`
+- `isDocumentRequest: true`
+- auth succeeds via `store-exchanged-session`, then `return-existing-session`
+
+Just as important is what is not present anywhere in the restarted log:
+
+- no `/auth/login` request
+- no `/app/qrcodes/new` request
+- no `redirect-login-missing-shop-host`
+- no 401 or invalid-session outcome
+
+So the restart-era log does not show the failure. It only shows a successful document request back into `/app` with valid Shopify auth parameters.
+
+## What The Mixed UI Probably Means
+
+The mixed UI is a useful clue.
+
+The real `/auth/login` route is a standalone server response:
+
+- `src/routes/auth.login.ts:18-43` returns raw HTML for the login page
+- `src/routes/auth.login.ts:45-82` handles it entirely as a server route
+- unlike the `/app` tree, it does not render `AppProvider`
+- `src/components/AppProvider.tsx:13-30` is where the embedded App Bridge script and `shopify:navigate` wiring are installed
+
+That means the login page itself is not the normal embedded app shell.
+
+So if the login form was visible at the same time as stale app-level chrome, the most plausible interpretation is:
+
+- the iframe content had already fallen back to the raw `/auth/login` page
+- but Shopify Admin or App Bridge-driven chrome from the previous embedded route was still visually hanging around
+
+That would also fit the click behavior:
+
+- stale action UI can remain visible without being meaningfully wired to the current page
+- a later navigation that causes a fresh document request to `/app` can recover the session and get the merchant back into the app
+
+This is still a hypothesis, but it explains the "login form plus stale actions" observation better than the earlier assumption that the login page itself was rendering those controls.
+
+## Updated Read On This Morning's Event
+
+What the current evidence supports is narrower than a full root cause.
+
+The most likely read is:
+
+1. The browser was already in a bad post-inactivity state before the successful morning `/app` request that appears in the restarted log.
+2. Restarting the dev server erased the earlier failure trace, so the log cannot tell us when the transition to the login form originally happened.
+3. The visible stale chrome suggests the browser may have been showing raw `/auth/login` content inside an embedded shell that had not fully reset its previous top-bar state.
+4. Clicking the breadcrumb likely triggered the first fresh, fully parameterized document request back to `/app`.
+5. That `/app` request succeeded immediately, which is exactly what the restarted log shows.
 
 ## Bottom Line
 
@@ -263,3 +349,5 @@ The important facts now are:
 - Not seeing `shop` in the address bar during normal navigation is normal.
 - Shopify's own reference apps also use bare internal links.
 - The failure we need to observe is a specific request-shape failure: normal client-side app navigation versus full document request/auth fallback.
+- The morning restart log did not capture that failure path; it only captured a clean recovery into `/app`.
+- The mixed login-form-plus-stale-chrome state is now evidence that the embedded shell can look partially stale after the fallback, which means the visible UI alone may not tell us which route document is actually loaded.
