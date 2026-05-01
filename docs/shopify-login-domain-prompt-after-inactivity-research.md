@@ -377,17 +377,214 @@ The POST path (merchant explicitly submits a shop domain) would stay as-is — t
 
 A safe minimum: replace the domain form with a plain message like "Your session has expired. Return to Shopify to reopen the app." with a link to the app URL. This at least gives a clear action instead of a confusing domain input. It does not attempt any automatic recovery.
 
+## How Embedded SPA Navigation Actually Works (Grounded)
+
+The earlier sections kept asking "did this click degrade?" without spelling out the chain. Here is the chain, end to end, grounded in `docs/app-bridge-readable.js` and the Polaris-driven AppProvider pattern.
+
+### Polaris web components are what dispatch `shopify:navigate`
+
+App Bridge does NOT dispatch `shopify:navigate`. Search the bundle:
+
+```bash
+grep 'shopify:navigate' docs/app-bridge-readable.js
+# (no matches)
+```
+
+It is the Polaris web components (`<s-link>`, `<s-button>`, `<s-clickable>`) loaded from `polaris.js` that:
+
+- intercept the click on themselves
+- `preventDefault()`
+- dispatch `new CustomEvent('shopify:navigate', { ... })` from the element
+
+Confirmed by upstream changelog and tests:
+
+- `refs/shopify-rr/packages/apps/shopify-app-remix/CHANGELOG.md:198`: "[AppProvider] - automatically handle the 'shopify:navigate' event for Remix apps using Polaris Web Components."
+- `refs/shopify-rr/packages/apps/shopify-app-remix/src/react/components/AppProvider/__tests__/AppProvider.test.tsx:85` dispatches a synthetic `new CustomEvent('shopify:navigate', { ... })`.
+
+`AppProvider` (both ours `src/components/AppProvider.tsx:13-30` and upstream `refs/shopify-app-js/.../AppProvider.tsx:114-138`) just listens for that event and calls the framework router's `navigate(href)`.
+
+### What App Bridge actually does to clicks (it does NOT route `https:` clicks)
+
+`docs/app-bridge-readable.js:407` defines:
+
+```js
+const Ft=["shopify:","app:","extension:"]
+const Ut=[...Ft,"https:","http:"]
+const Nt=["a","s-link","s-button","s-clickable"]
+```
+
+The capture-phase click handler at `docs/app-bridge-readable.js:457-475`:
+
+- walks up to find an `Nt` element with an `href`
+- only calls `preventDefault()` for `Ft` protocols (`shopify:`, `app:`, `extension:`)
+- for `https:` `_self` internal links, it does NOT preventDefault and does NOT dispatch any event
+
+So `<s-button href="/app/qrcodes/new">` is not intercepted by App Bridge as a navigation. The Polaris web component itself is responsible for preventDefault + `shopify:navigate`.
+
+This means: **if Polaris web components have not upgraded yet (script not loaded, or the element is not yet defined when the user clicks), clicks on `<s-button>`/`<s-link>` simply do nothing.** They do NOT fall back to a document request, because `s-button` is not an `<a>` and has no native navigation.
+
+That kills the earlier "click degraded into a document GET" framing for in-app clicks.
+
+### What App Bridge does to `fetch` (this IS where `Authorization` gets attached)
+
+`docs/app-bridge-readable.js:341-379` (the `It` module) patches `globalThis.fetch`:
+
+```js
+Ct(globalThis,"fetch",async function(r,a){
+  const s=new Request(r instanceof Request?r.clone():r,a),
+        ...
+        l = (same protocol && (same hostname || hostname endsWith "."+location.hostname)) || appOrigins.includes(origin),
+        ...
+  // line 364:
+  const m = l && !s.headers.has("Authorization");
+  m && s.headers.set("Authorization","Bearer "+await t.idToken()),
+  l && !s.headers.has("X-Requested-With") && s.headers.set("X-Requested-With","XMLHttpRequest"),
+  ...
+  // also handles 401 + X-Shopify-Retry-Invalid-Session-Request retry (line 370-372)
+})
+```
+
+Important properties:
+
+- only `globalThis.fetch` is patched — anything that bypasses `fetch` (full document loads, iframe `src` changes, `window.location =`, browser reload, BFCache restore) is NOT touched
+- Authorization is added only when the URL matches `location.protocol`+hostname (or `appOrigins`)
+- on `401 + X-Shopify-Retry-Invalid-Session-Request: 1`, App Bridge fetches a fresh `idToken()` and retries once
+
+This is exactly the contract `src/lib/ShopifyServerFnMiddleware.ts:13-21` describes ("App Bridge patches global browser `fetch` and auto-attaches `Authorization: Bearer <session_token>`").
+
+So:
+
+- TanStack server function call → goes through `fetch` → patched → `Authorization` header added → server sees `headerSessionToken` → `isDocumentRequest = false` (`src/lib/Shopify.ts:464`).
+- Browser-level document load → not `fetch` at all → no `Authorization` → server sees `isDocumentRequest = true`.
+
+`isDocumentRequest` is purely the absence of an `Authorization` header. It is not "what kind of route" or "what TanStack thinks". It is literally whether App Bridge's fetch patch ran on this request.
+
+### Why the request had no `Authorization`: it was not a `fetch` at all
+
+Given the above:
+
+- The fetch patch is not "breaking down" mid-session. If it ran, `Authorization` would be present.
+- The Polaris click → `shopify:navigate` → `useNavigate()` path is SPA-only and does not produce a document request.
+- The only way to land on `/app/qrcodes/new` as a document request is for the browser (or Shopify Admin parent) to load that URL into the iframe directly — outside the patched `fetch` lifecycle.
+
+Plausible triggers for that document load:
+
+- iframe gets reloaded (BFCache eviction after long inactivity, browser tab discard/restore, Admin re-navigates the iframe's `src`)
+- App Bridge tells Admin to navigate via `Navigation.history.replace` (`docs/app-bridge-readable.js:535-558`) and Admin later re-uses that stored path as the iframe URL on a refresh
+
+In all of those, the URL the iframe reloads is whatever was in `location.href` at the time. That brings up the actual mechanism.
+
+### The iframe URL loses `shop`/`host` on SPA navigation
+
+`AppProvider` does `navigate({ to: href })` (`src/components/AppProvider.tsx:20`) where `href` is whatever the link element exposes. TanStack's `navigate({ to })` does not preserve search params unless you ask for them.
+
+In this repo:
+
+- The `s-app-nav` links DO preserve search: `src/routes/app.tsx:119-121` use `` href={`/app${searchStr}`} ``.
+- The CTA buttons do NOT: `src/routes/app.index.tsx:50,108` use `<s-button href="/app/qrcodes/new" ...>`.
+
+So clicking "Create QR code" SPA-navigates to `/app/qrcodes/new` with no query string. App Bridge's `pushState` patch (`docs/app-bridge-readable.js:527-528, 535-538`) reports `pathname + search + hash` to Admin — and `search` is now empty.
+
+If anything later reloads the iframe (overnight inactivity → BFCache eviction → browser reloads at the last URL; Admin re-navigates iframe `src` after suspension), the iframe loads `/app/qrcodes/new` with no `shop`, no `host`, and no `id_token`. That document request hits `src/lib/Shopify.ts:464-490`:
+
+```ts
+const isDocumentRequest = !headerSessionToken;
+if (isDocumentRequest) {
+  if (!shop || !host) {
+    return Response.redirect(new URL("/auth/login", request.url).toString());
+  }
+}
+```
+
+Which is exactly the symptom — and explains why the morning restart log shows a clean `/app` document request with `hasShop: true, hasHost: true, hasIdToken: true`: that was the recovery click on the breadcrumb (which DOES preserve `searchStr` via `src/routes/app.tsx:119`). The earlier failing iframe URL (`/app/qrcodes/new` without params) was already gone when the dev server restarted.
+
+### Does `refs/shopify-app-template` behave the same as the proposed `renderExitIframePage` fix?
+
+No — and the template does not "solve" this either.
+
+- The template's `app.tsx` (`refs/shopify-app-template/app/routes/app.tsx:21-22`) uses the same bare `<s-link href="/app">` / `<s-link href="/app/additional">` pattern with no search preservation.
+- Its `AppProvider` (`refs/shopify-app-js/.../AppProvider.tsx:117-130`) does the same `navigate(href)` thing — React Router's `navigate(string)` also resets search.
+- So the template's iframe URL loses `shop`/`host` on internal SPA nav too. It is structurally vulnerable to the same "iframe reload at a stripped URL → `/auth/login`" path.
+- The template's `/auth/login` route does NOT do anything fancy. It is the upstream `shopify.login` that returns the standard shop-domain form.
+- The template does NOT call `renderExitIframePage` from `/auth/login`. The proposed fix is not what the template is doing.
+
+So porting from the template did not import a working solution to this — it imported the same vulnerability.
+
+### Diagnostics check (what the existing logs would prove on a recurrence)
+
+The instrumentation in `src/lib/Shopify.ts:465-599` already captures everything needed to confirm the trigger on the next failure:
+
+If the bug recurs and the dev server is NOT restarted, the failing log line would show:
+
+- `pathname: /app/qrcodes/new`
+- `requestUrl: <appUrl>/app/qrcodes/new` (no `?shop=...&host=...`)
+- `hasAuthorizationHeader: false`
+- `hasShop: false`
+- `hasHost: false`
+- `hasIdToken: false`
+- `isDocumentRequest: true`
+- `event: redirect-login-missing-shop-host`
+
+That is enough to confirm "iframe document-loaded a stripped URL". No client-side telemetry needed for the first-order question.
+
+What the current logs would NOT tell us:
+
+- Whether the iframe reload was browser-initiated (BFCache, tab discard) vs Admin-initiated (`<iframe src=>` change). Both produce identical server-side fingerprints.
+- The previous SPA URL state. If we wanted to prove the URL was already stripped before the reload, we would need a client-side `pageshow` / `unload` log (or just rely on the URL-strip mechanism above).
+
+## Reassessment Of The Proposed `renderExitIframePage` Fix
+
+`renderExitIframePage` (`src/lib/Shopify.ts:110-119`) currently outputs:
+
+```html
+<script data-api-key="..." src="${APP_BRIDGE_URL}"></script>
+<script>window.open(destination, "_top")</script>
+```
+
+`window.open(url, "_top")` navigates the **top** browsing context to `url`.
+
+Calling it from `/auth/login` with `shop: null` and `destination: shopify.config.appUrl`:
+
+- `appUrl` is the Cloudflare Worker URL (e.g. the tunnel host), NOT `https://admin.shopify.com/...`.
+- The top frame would navigate away from Shopify Admin to the bare worker URL.
+- Outside Admin there is no parent frame to provide `shop`/`host`/`id_token`, so the worker would just redirect again to `/auth/login`, which would render the same exit-iframe page, which would `_top`-navigate again — a loop, with the user stuck outside Admin.
+
+To re-enter Admin you would need a URL of the form `https://admin.shopify.com/store/<shop>/apps/<app-handle>` — but at this point we do not have `shop`. That is the exact reason the upstream `/auth/login` falls back to asking for the shop domain.
+
+So the proposed fix does not work as drafted. It papers over the visible UI without actually re-entering the embedded shell.
+
+### What would actually fix this
+
+The cleanest fix is at the source: stop letting the iframe URL drift to a state that cannot be reloaded.
+
+Option A (minimal, structural): preserve search in `AppProvider`'s `shopify:navigate` handler.
+
+```ts
+// src/components/AppProvider.tsx
+void navigate({ to: href, search: (prev) => prev });
+```
+
+This makes every Polaris-driven SPA navigation carry forward whatever Shopify auth params are currently in the URL. After a reload the iframe URL still contains `shop`/`host`/`embedded` and `authenticateAdmin` survives.
+
+Caveat: this carries `id_token` forward too, which is short-lived. Probably fine because `id_token` mismatch falls into the existing `redirect-session-token-bounce` path (`src/lib/Shopify.ts:499-515`), which is recoverable.
+
+Option B (more explicit): make every internal `<s-button>`/`<s-link>` href include `${searchStr}`, the way `src/routes/app.tsx:119-121` already does. More code churn, but it does not require trusting `useNavigate` defaults.
+
+Option C (give up on recovery, do not rely on the domain form): replace `/auth/login`'s domain-form GET with a clear "Return to Shopify Admin to reopen the app" message and a link to the merchant's known last-good Admin URL if we have one. Still not a full recovery, but stops asking the merchant for info they cannot provide.
+
+The earlier "Confirmed Alternative: 'Your session expired' message" section is consistent with Option C and remains a safe minimum if no source-side fix is in scope.
+
 ## Bottom Line
 
 The domain prompt is Shopify's standard `/auth/login` fallback form. That part is expected.
 
-What is not expected is getting sent there from an already-embedded merchant click.
+What is not expected is getting sent there from an already-embedded merchant click. Updated read:
 
-The important facts now are:
-
-- `idToken()` is probably unrelated.
-- Not seeing `shop` in the address bar during normal navigation is normal.
-- Shopify's own reference apps also use bare internal links.
-- The failure we need to observe is a specific request-shape failure: normal client-side app navigation versus full document request/auth fallback.
-- The morning restart log did not capture that failure path; it only captured a clean recovery into `/app`.
-- The mixed login-form-plus-stale-chrome state is now evidence that the embedded shell can look partially stale after the fallback, which means the visible UI alone may not tell us which route document is actually loaded.
+- The trigger is not "the click degraded mid-flight". `<s-button>` clicks cannot degrade into a `https:` document GET — App Bridge does not preventDefault those, and the web component itself is the only thing that turns them into navigation.
+- `isDocumentRequest` is purely "no `Authorization` header". The header is added only when the request goes through patched `fetch`. Document-level loads (iframe reload, BFCache restore, Admin re-navigation of `iframe.src`) bypass `fetch` entirely and therefore always look like document requests.
+- The fetch patch is not "breaking down". When it runs, it attaches the header.
+- The most plausible cause of a document GET to `/app/qrcodes/new` with no `shop`/`host` is that the iframe's URL had already drifted to a search-stripped state during normal SPA navigation, then the iframe got reloaded after inactivity and re-fetched that stripped URL.
+- `refs/shopify-app-template` is structurally vulnerable to the same drift (bare hrefs + `navigate(href)`). It does not implement the proposed `renderExitIframePage` fix.
+- The proposed `renderExitIframePage` fix from `/auth/login` with `shop: null` does not actually recover the embedded session; it would `_top`-navigate to the bare worker URL and likely loop.
+- The cleanest fix is at the source: preserve search params on internal SPA navigation, either inside `AppProvider`'s handler or on every internal link.
+- The existing server-side diagnostics in `src/lib/Shopify.ts:465-599` and the call-site logs in `src/routes/app.tsx:47-84` and `src/lib/ShopifyServerFnMiddleware.ts:52-84` are sufficient to confirm the trigger on the next reproduction, provided the dev server is not restarted before the log is read.
