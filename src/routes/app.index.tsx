@@ -17,7 +17,12 @@ const listQrCodes = createServerFn({ method: "GET" })
   );
 
 export const Route = createFileRoute("/app/")({
-  loader: () => listQrCodes(),
+  /**
+   * `staleReloadMode: "blocking"` prevents stale-while-revalidate from briefly
+   * showing cached data after a mutation (e.g. edit title, delete). Navigation
+   * blocks until the fresh loader result is ready.
+   */
+  loader: { handler: () => listQrCodes(), staleReloadMode: "blocking" },
   component: AppIndex,
 });
 
