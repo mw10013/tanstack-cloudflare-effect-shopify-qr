@@ -164,14 +164,17 @@ function QrCodeForm() {
   /**
    * Re-bases TanStack Form to the just-saved values on same-handle saves so
    * `state.isDefaultValue` reflects the persisted baseline immediately.
+   *
+   * `form.reset(variables)` is called **after** `router.invalidate` to avoid a
+   * title flash. Calling it before invalidation clears `isTouched`, which lets
+   * TanStack Form's `update()` (runs every render, no dep array) auto-reset the
+   * form to stale `loaderData` values during the mid-invalidation render cycle.
+   * Keeping `isTouched = true` throughout the loader re-run blocks that path.
    */
   const saveMutation = useMutation({
     mutationFn: (data: typeof defaultValues) =>
       saveQrCode({ data: { handle, ...data } }),
     onSuccess: async (result, variables) => {
-      if (result.handle === handle) {
-        form.reset(variables);
-      }
       await shopify.saveBar.hide(qrCodeSaveBarId);
       if (result.handle !== handle) {
         await navigate({
@@ -181,6 +184,7 @@ function QrCodeForm() {
         return;
       }
       await router.invalidate({ sync: true });
+      form.reset(variables);
     },
   });
   const deleteMutation = useMutation({
