@@ -23,7 +23,7 @@ shopify app dev
 ```bash
 # first time
 # set client_id = "" in shopify.app.staging.toml
-# creates tcesa-staging in Shopify Partners
+# creates tcesq-staging in Shopify Partners
 shopify app config link --config staging
 # fix shopify.app.staging.toml: set application_url and redirect_urls to your Workers URL,
 # set automatically_update_urls_on_dev = false
@@ -38,7 +38,7 @@ pnpm deploy:staging
 ```
 
 Connect GitHub for automatic deploys on push:
-- Cloudflare Dashboard → Workers & Pages → `tcesa-staging` → Settings
+- Cloudflare Dashboard → Workers & Pages → `tcesq-staging` → Settings
   - Git repository: connect to repo
   - Build configuration
     - Build command: `CLOUDFLARE_ENV=staging pnpm build`
@@ -49,4 +49,4 @@ Connect GitHub for automatic deploys on push:
 shopify app deploy --config staging
 ```
 
-Install on dev store: Shopify Dev Dashboard → Apps → `tcesa-staging` → Test on development store.
+Install on dev store: Shopify Dev Dashboard → Apps → `tcesq-staging` → Test on development store.
