@@ -44,14 +44,44 @@ const authenticateAppRoute = createServerFn({ method: "GET" })
             headers: request.headers,
           },
         );
+        yield* Effect.logDebug("authenticateAppRoute").pipe(
+          Effect.annotateLogs({
+            event: "start",
+            source: "app-beforeLoad-serverfn",
+            currentRequestUrl: request.url,
+            appRequestUrl: appRequest.url,
+            hasAuthorizationHeader: Boolean(request.headers.get("authorization")),
+          }),
+        );
         const session = yield* shopify.authenticateAdmin(appRequest);
 
         if (session instanceof Response) {
+          yield* Effect.logDebug("authenticateAppRoute").pipe(
+            Effect.annotateLogs({
+              event: "response",
+              source: "app-beforeLoad-serverfn",
+              currentRequestUrl: request.url,
+              appRequestUrl: appRequest.url,
+              status: session.status,
+              location:
+                session.headers.get("Location") ?? session.headers.get("location"),
+            }),
+          );
           const location =
             session.headers.get("Location") ?? session.headers.get("location");
           if (location) return yield* Effect.fail(redirect({ href: location }));
           return yield* Effect.fail(session);
         }
+
+        yield* Effect.logDebug("authenticateAppRoute").pipe(
+          Effect.annotateLogs({
+            event: "session",
+            source: "app-beforeLoad-serverfn",
+            currentRequestUrl: request.url,
+            appRequestUrl: appRequest.url,
+            shop: session.shop,
+          }),
+        );
 
         return {
           apiKey: Redacted.value(shopify.config.apiKey),

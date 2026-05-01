@@ -70,6 +70,35 @@ So this is the important distinction:
 
 That is exactly what `src/lib/Shopify.ts:464-470` does.
 
+The current server log confirms this normal behavior directly.
+
+In healthy navigation to `Create QR code`, the log shows:
+
+- `pathname: /app/qrcodes/new`
+- `hasAuthorizationHeader: true`
+- `hasShop: false`
+- `hasHost: false`
+- `isDocumentRequest: false`
+- followed by `event: return-existing-session`
+
+See `logs/server.log:321-339`.
+
+The child route server function also behaves the same way:
+
+- `pathname: /_serverFn/...loadQrCode...`
+- `hasAuthorizationHeader: true`
+- `hasShop: false`
+- `hasHost: false`
+- `isDocumentRequest: false`
+
+See `logs/server.log:349-365`.
+
+So the normal steady-state path is now confirmed, not just inferred:
+
+- the app does work without visible `shop` / `host`
+- `/app/qrcodes/new` is normally authenticated via `Authorization`
+- the observed bug is not simply "bare links do not carry `shop`"
+
 ## The Reference Apps Also Use Bare Internal Links
 
 Yes. Both reference apps use bare internal links without carrying `shop` in the href.
@@ -166,28 +195,61 @@ Both auth entry points convert redirect `Response`s into TanStack router redirec
 
 So once auth decides on `/auth/login`, the app can end up there immediately.
 
-## Observability We Need
+## Observability Now In Place
 
-Yes, we should instrument this.
+The auth-boundary diagnostics are now instrumented in code.
 
-The right observability is around `shopify.authenticateAdmin` in `src/lib/Shopify.ts`, specifically before the document/XHR split and before each auth redirect.
+### `shopify.authenticateAdmin`
 
-For each suspicious request, log:
+`src/lib/Shopify.ts:465-599` now logs:
 
-- pathname
-- full request URL
-- whether `authorization` header is present
+- `event: start`
+- request pathname and full URL
+- whether `authorization` header exists
 - whether `shop` exists
 - whether `host` exists
 - whether `id_token` exists
 - computed `isDocumentRequest`
-- whether the request is going to `/app/qrcodes/new`, `/app`, `/auth/login`, or a server-function endpoint
-- whether auth returned a redirect, 401, or authenticated session
+- redirect outcomes like `redirect-login-missing-shop-host`, `redirect-embedded-app-url`, `redirect-session-token-bounce`
+- invalid-session outcomes after decode or token exchange
+- successful session outcomes like `return-existing-session` and `store-exchanged-session`
 
-That will let us answer the only question that matters right now:
+This is the main signal we need.
 
-- Is the bad path a full document request to `/app/qrcodes/new`?
-- Or is it a server-function/auth-context failure?
+### Call-Site Source Logs
+
+We also now log which higher-level auth entry point reached `authenticateAdmin`:
+
+- `src/routes/app.tsx:47-84` logs `source: app-beforeLoad-serverfn`
+- `src/lib/ShopifyServerFnMiddleware.ts:52-84` logs `source: serverfn-middleware`
+
+That matters because the same `/auth/login` redirect could be triggered from:
+
+- the `/app` layout auth path
+- or a child route server function
+
+With the current logs, we should be able to tell those apart.
+
+## Diagnostics Check
+
+For the next reproduction, the current server-side diagnostics should be enough to answer the first-order question.
+
+If the bug reappears, we should be able to tell:
+
+- whether the failing auth call came from `app-beforeLoad-serverfn` or `serverfn-middleware`
+- whether the failing request had `Authorization`
+- whether it was treated as `isDocumentRequest: true`
+- whether it redirected via `redirect-login-missing-shop-host`
+- whether it instead bounced through `/auth/session-token` or failed as 401
+
+That is enough to distinguish:
+
+- full document-request fallback to `/auth/login`
+- versus embedded auth/session failure on a server-function path
+
+I do not think we need more server-side diagnostics before the next reproduction.
+
+If these logs still leave ambiguity after a real failure trace, the next increment would be client-side click/navigation telemetry. But that is not necessary yet.
 
 ## Bottom Line
 

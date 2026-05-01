@@ -49,13 +49,39 @@ export const shopifyServerFnMiddleware = createMiddleware({ type: "function" })
       Effect.gen(function* () {
         const shopify = yield* Shopify;
         const request = yield* CurrentRequest;
+        yield* Effect.logDebug("shopifyServerFnMiddleware").pipe(
+          Effect.annotateLogs({
+            event: "start",
+            source: "serverfn-middleware",
+            requestUrl: request.url,
+            hasAuthorizationHeader: Boolean(request.headers.get("authorization")),
+          }),
+        );
         const session = yield* shopify.authenticateAdmin(request);
 
         if (session instanceof Response) {
+          yield* Effect.logDebug("shopifyServerFnMiddleware").pipe(
+            Effect.annotateLogs({
+              event: "response",
+              source: "serverfn-middleware",
+              requestUrl: request.url,
+              status: session.status,
+              location: session.headers.get("Location") ?? session.headers.get("location"),
+            }),
+          );
           const location = session.headers.get("Location") ?? session.headers.get("location");
           if (location) return yield* Effect.fail(redirect({ href: location }));
           return yield* Effect.fail(session);
         }
+
+        yield* Effect.logDebug("shopifyServerFnMiddleware").pipe(
+          Effect.annotateLogs({
+            event: "session",
+            source: "serverfn-middleware",
+            requestUrl: request.url,
+            shop: session.shop,
+          }),
+        );
 
         const currentShopifySessionLayer = Layer.succeed(CurrentShopifySession, session);
         const shopifyAdminLayer = Layer.provide(ShopifyAdmin.layer, currentShopifySessionLayer);
