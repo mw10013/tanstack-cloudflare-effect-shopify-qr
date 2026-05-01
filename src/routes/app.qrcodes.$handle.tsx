@@ -28,19 +28,24 @@ const DeleteQrInput = Schema.Struct({
   id: Domain.QrCode.fields.id,
 });
 
-type QrFormState = Pick<
-  Domain.QrCode,
-  "title" | "productTitle" | "productImage" | "productAlt" | "destination"
-> & {
-  readonly id: Domain.QrCode["id"] | null;
-  readonly handle: Domain.QrCode["handle"] | null;
-  readonly productId: typeof QrFormInput.Encoded.productId;
-  readonly productVariantId: typeof QrFormInput.Encoded.productVariantId;
-  readonly image: string | null;
-  readonly scanUrl: string | null;
-  readonly destinationUrl: string | null;
-  readonly shop: Domain.Shop;
-};
+interface QrFormState {
+  readonly identity: {
+    readonly id: Domain.QrCode["id"] | null;
+    readonly handle: Domain.QrCode["handle"] | null;
+    readonly shop: Domain.Shop;
+  };
+  readonly form: typeof QrFormInput.Encoded;
+  readonly product: {
+    readonly title: Domain.QrCode["productTitle"];
+    readonly image: Domain.QrCode["productImage"];
+    readonly alt: Domain.QrCode["productAlt"];
+  };
+  readonly preview: {
+    readonly image: string | null;
+    readonly scanUrl: string | null;
+    readonly destinationUrl: string | null;
+  };
+}
 
 const loadQrCode = createServerFn({ method: "GET" })
   .middleware([shopifyServerFnMiddleware])
@@ -56,19 +61,15 @@ const loadQrCode = createServerFn({ method: "GET" })
         );
         if (handle === "new") {
           return {
-            id: null,
-            handle: null,
-            title: "",
-            productId: "",
-            productVariantId: "",
-            productTitle: null,
-            productImage: null,
-            productAlt: null,
-            destination: "product",
-            image: null,
-            scanUrl: null,
-            destinationUrl: null,
-            shop,
+            identity: { id: null, handle: null, shop },
+            form: {
+              title: "",
+              productId: "",
+              productVariantId: "",
+              destination: "product",
+            },
+            product: { title: null, image: null, alt: null },
+            preview: { image: null, scanUrl: null, destinationUrl: null },
           } satisfies QrFormState;
         }
         const qrCodeHandle = yield* Schema.decodeUnknownEffect(
@@ -86,19 +87,19 @@ const loadQrCode = createServerFn({ method: "GET" })
           .getDestinationUrl(qrCode, shop)
           .pipe(Effect.catchTag("QrServiceError", () => Effect.succeed(null)));
         return {
-          id: qrCode.id,
-          handle: qrCode.handle,
-          title: qrCode.title,
-          productId: qrCode.productId,
-          productVariantId: qrCode.productVariantId,
-          productTitle: qrCode.productTitle,
-          productImage: qrCode.productImage,
-          productAlt: qrCode.productAlt,
-          destination: qrCode.destination,
-          image,
-          scanUrl,
-          destinationUrl,
-          shop,
+          identity: { id: qrCode.id, handle: qrCode.handle, shop },
+          form: {
+            title: qrCode.title,
+            productId: qrCode.productId,
+            productVariantId: qrCode.productVariantId,
+            destination: qrCode.destination,
+          },
+          product: {
+            title: qrCode.productTitle,
+            image: qrCode.productImage,
+            alt: qrCode.productAlt,
+          },
+          preview: { image, scanUrl, destinationUrl },
         } satisfies QrFormState;
       }),
     ),
@@ -155,17 +156,8 @@ function QrCodeForm() {
   const navigate = useNavigate();
   const shopify = useAppBridge();
   const isHydrated = useHydrated();
-  const defaultValues = {
-    title: loaderData.title,
-    productId: loaderData.productId,
-    productVariantId: loaderData.productVariantId,
-    destination: loaderData.destination,
-  } satisfies typeof QrFormInput.Encoded;
-  const loaderProduct = {
-    title: loaderData.productTitle,
-    image: loaderData.productImage,
-    alt: loaderData.productAlt,
-  };
+  const defaultValues: typeof QrFormInput.Encoded = { ...loaderData.form };
+  const loaderProduct = loaderData.product;
   const [pickedProduct, setPickedProduct] = React.useState<
     null | typeof loaderProduct
   >(null);
@@ -260,8 +252,8 @@ function QrCodeForm() {
   };
 
   const deleteCurrent = () => {
-    if (!loaderData.id) return;
-    deleteMutation.mutate({ id: loaderData.id });
+    if (!loaderData.identity.id) return;
+    deleteMutation.mutate({ id: loaderData.identity.id });
   };
 
   const reset = async () => {
@@ -295,11 +287,15 @@ function QrCodeForm() {
         />
         <button onClick={() => void reset()} />
       </ui-save-bar>
-      <s-page heading={loaderData.handle ? loaderData.title : "Create QR code"}>
+      <s-page
+        heading={
+          loaderData.identity.handle ? loaderData.form.title : "Create QR code"
+        }
+      >
         <s-link href="/app" slot="breadcrumb-actions" onClick={leave}>
           QR codes
         </s-link>
-        {loaderData.id && isHydrated && (
+        {loaderData.identity.id && isHydrated && (
           <s-button
             slot="secondary-actions"
             onClick={deleteCurrent}
@@ -354,8 +350,11 @@ function QrCodeForm() {
                       Link to checkout page with product in the cart
                     </s-option>
                   </s-select>
-                  {loaderData.destinationUrl && (
-                    <s-link href={loaderData.destinationUrl} target="_blank">
+                  {loaderData.preview.destinationUrl && (
+                    <s-link
+                      href={loaderData.preview.destinationUrl}
+                      target="_blank"
+                    >
                       Go to destination URL
                     </s-link>
                   )}
@@ -462,10 +461,10 @@ function QrCodeForm() {
                 borderRadius="base"
                 background="subdued"
               >
-                {loaderData.image ? (
+                {loaderData.preview.image ? (
                   <s-image
                     aspectRatio="1/0.8"
-                    src={loaderData.image}
+                    src={loaderData.preview.image}
                     alt="The QR code for the current form"
                   />
                 ) : (
@@ -486,16 +485,16 @@ function QrCodeForm() {
                 justifyContent="space-between"
               >
                 <s-button
-                  disabled={!loaderData.handle}
-                  href={loaderData.scanUrl ?? undefined}
+                  disabled={!loaderData.identity.handle}
+                  href={loaderData.preview.scanUrl ?? undefined}
                   target="_blank"
                 >
                   Go to public URL
                 </s-button>
                 <s-button
-                  disabled={!loaderData.image}
-                  href={loaderData.image ?? undefined}
-                  download={`${loaderData.handle ?? "qr-code"}.png`}
+                  disabled={!loaderData.preview.image}
+                  href={loaderData.preview.image ?? undefined}
+                  download={`${loaderData.identity.handle ?? "qr-code"}.png`}
                   variant="primary"
                 >
                   Download
