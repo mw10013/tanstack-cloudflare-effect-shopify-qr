@@ -337,6 +337,46 @@ The most likely read is:
 4. Clicking the breadcrumb likely triggered the first fresh, fully parameterized document request back to `/app`.
 5. That `/app` request succeeded immediately, which is exactly what the restarted log shows.
 
+## The Domain Form Is Useless For Embedded Merchants
+
+The domain form at `GET /auth/login` with no `shop` param asks the merchant to type their shop domain. A merchant who arrived there from an embedded app click has no idea what that means and no easy way to find it.
+
+Two distinct questions:
+
+1. Why does the merchant end up at `/auth/login` at all? (The open research question above.)
+2. What should happen once they are there? (The UX question below.)
+
+### Proposal: Replace The Domain Form With An exitIframe Hard Reset (Uncertain)
+
+**Status: Proposed. Not implemented. Uncertain whether this is correct.**
+
+The existing `renderExitIframePage` helper (`src/lib/Shopify.ts:110-119`) does:
+
+```html
+<script data-api-key="..." src="${APP_BRIDGE_URL}"></script>
+<script>window.open(destination, "_top")</script>
+```
+
+This loads App Bridge fresh in the iframe and uses `window.open(url, "_top")` to navigate the **top Shopify Admin window** (not the iframe). Shopify Admin would then re-open the app with fresh `shop`/`host`/`id_token` params — effectively a hard reset.
+
+The proposal is: at `auth.login.ts:58-61`, the `GET` path with no `shop` currently renders the domain form. Instead it could return:
+
+```ts
+renderExitIframePage(Redacted.value(shopify.config.apiKey), null, shopify.config.appUrl)
+```
+
+The POST path (merchant explicitly submits a shop domain) would stay as-is — that path is for OAuth from outside the embedded flow.
+
+**Edge cases that make this uncertain:**
+
+- If the page is visited directly in a browser (not inside Shopify Admin), App Bridge has no parent frame to communicate with. `window.open(appUrl, "_top")` would just navigate the tab to the app root, which is probably still better than the domain form.
+- It's not certain that App Bridge will successfully initialize and reach Shopify Admin from within a stale or partially-failed iframe state. The mixed UI observed (login form + stale chrome) suggests the Admin shell may be in an inconsistent state when this page is reached.
+- The `renderExitIframePage` call is currently only used by `src/lib/Shopify.ts:452-457` when both `shop` and `host` are known. Calling it with `shop: null` is untested.
+
+### Confirmed Alternative: "Your session expired" Message
+
+A safe minimum: replace the domain form with a plain message like "Your session has expired. Return to Shopify to reopen the app." with a link to the app URL. This at least gives a clear action instead of a confusing domain input. It does not attempt any automatic recovery.
+
 ## Bottom Line
 
 The domain prompt is Shopify's standard `/auth/login` fallback form. That part is expected.
