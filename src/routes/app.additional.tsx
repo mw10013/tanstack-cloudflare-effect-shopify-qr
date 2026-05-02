@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/app/additional")({
-  component: AdditionalPage,
+  component: RouteComponent,
 });
 
-function AdditionalPage() {
+function RouteComponent() {
   return (
     <s-page heading="Additional page">
       <s-section heading="Multiple pages">

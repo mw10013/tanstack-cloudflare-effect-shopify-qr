@@ -107,10 +107,10 @@ export const Route = createFileRoute("/app")({
       },
     });
   },
-  component: AppLayout,
+  component: RouteComponent,
 });
 
-function AppLayout() {
+function RouteComponent() {
   const { apiKey } = Route.useRouteContext();
   const { searchStr } = useLocation();
   return (

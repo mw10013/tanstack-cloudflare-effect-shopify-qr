@@ -7,10 +7,10 @@ export const Route = createFileRoute("/")({
       throw redirect({ href: `/app${location.searchStr}` });
     }
   },
-  component: IndexPage,
+  component: RouteComponent,
 });
 
-function IndexPage() {
+function RouteComponent() {
   return (
     <div style={{ fontFamily: "Inter, system-ui, sans-serif", margin: 0, padding: "2rem", background: "#f4f4f5", color: "#18181b", minHeight: "100vh" }}>
       <div style={{ maxWidth: "34rem", margin: "0 auto", background: "#fff", border: "1px solid #e4e4e7", borderRadius: "0.75rem", padding: "1.25rem" }}>

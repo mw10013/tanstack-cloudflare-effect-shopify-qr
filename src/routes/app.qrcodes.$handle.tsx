@@ -146,10 +146,10 @@ const deleteQrCode = createServerFn({ method: "POST" })
 
 export const Route = createFileRoute("/app/qrcodes/$handle")({
   loader: ({ params }) => loadQrCode({ data: { handle: params.handle } }),
-  component: QrCodeForm,
+  component: RouteComponent,
 });
 
-function QrCodeForm() {
+function RouteComponent() {
   const loaderData = Route.useLoaderData();
   const { handle } = Route.useParams();
   const router = useRouter();

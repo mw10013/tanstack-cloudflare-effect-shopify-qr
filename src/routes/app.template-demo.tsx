@@ -26,10 +26,10 @@ const generateProduct = createServerFn({ method: "POST" })
   );
 
 export const Route = createFileRoute("/app/template-demo")({
-  component: TemplateDemoPage,
+  component: RouteComponent,
 });
 
-function TemplateDemoPage() {
+function RouteComponent() {
   const shopify = useAppBridge();
   const hydrated = useHydrated();
   const [isLoading, setIsLoading] = React.useState(false);

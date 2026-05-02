@@ -23,7 +23,7 @@ export const Route = createFileRoute("/app/")({
    * blocks until the fresh loader result is ready.
    */
   loader: { handler: () => listQrCodes(), staleReloadMode: "blocking" },
-  component: AppIndex,
+  component: RouteComponent,
 });
 
 const truncate = (value: string | null, length = 25) => {
@@ -100,7 +100,7 @@ function QrCodeTable({ qrCodes }: { readonly qrCodes: Awaited<ReturnType<typeof 
   );
 }
 
-function AppIndex() {
+function RouteComponent() {
   const qrCodes = Route.useLoaderData();
 
   return (

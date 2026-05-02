@@ -38,10 +38,10 @@ export const Route = createRootRouteWithContext<{
   }),
   shellComponent: RootDocument,
   notFoundComponent: () => <div>Not Found</div>,
-  component: RootComponent,
+  component: RouteComponent,
 });
 
-function RootComponent() {
+function RouteComponent() {
   return <Outlet />;
 }
 
